@@ -1,23 +1,30 @@
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
-from sqlalchemy.pool import NullPool
-from app.config import settings
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Create engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    poolclass=NullPool if settings.DATABASE_URL.startswith("sqlite") else None
+# Используем переменную окружения DATABASE_URL (от Railway)
+# Если не установлена - используем локальный PostgreSQL
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://carspot_user:carspot_password@localhost:5432/carspot_db"
 )
 
-# Create session factory
+# Для Railway - заменяем postgresql:// на postgresql+psycopg2://
+if "postgresql://" in DATABASE_URL and "postgresql+psycopg2://" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
+engine = create_engine(
+    DATABASE_URL,
+    echo=True,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# ЕДИНЫЙ Base ДЛЯ ВСЕХ МОДЕЛЕЙ
 Base = declarative_base()
 
-def get_db() -> Session:
-    """Dependency for getting database session"""
+def get_db():
     db = SessionLocal()
     try:
         yield db
@@ -25,18 +32,6 @@ def get_db() -> Session:
         db.close()
 
 def init_db():
-    """Initialize database — create all tables"""
-    # 1. Подключаем расширение pg_trgm (для PostgreSQL)
-    if engine.url.drivername.startswith("postgresql"):
-        with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-            conn.commit()
-
-    # 2. Импортируем все модели, чтобы SQLAlchemy зарегистрировала их в едином Base.metadata
-    from app.models.user import User  # noqa
-    from app.models.event import Event  # noqa
-    from app.models.photo import Photo  # noqa
-    from app.models.rating import EventRating, UserRating, SpotRating  # noqa
-
-    # 3. Создаём все таблицы одним вызовом
+    """Создать все таблицы"""
     Base.metadata.create_all(bind=engine)
+    print("✅ Database initialized")
