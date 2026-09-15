@@ -2,20 +2,27 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://localhost/carspot_db"
-)
+# Получаем DATABASE_URL из переменных окружения Railway
+database_url = os.getenv("DATABASE_URL")
 
-# Для Railway - конвертируем postgresql:// в postgresql+psycopg2://
-if "postgresql://" in DATABASE_URL and "postgresql+psycopg2://" not in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+if database_url:
+    # Railway использует postgresql://, конвертируем в postgresql+psycopg2://
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+else:
+    # Fallback для локального
+    database_url = "postgresql+psycopg2://postgres:postgres@localhost:5432/carspot_db"
 
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-)
+try:
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+        echo=False
+    )
+except Exception as e:
+    print(f"ERROR: Cannot create engine: {e}")
+    raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -28,5 +35,8 @@ def get_db():
         db.close()
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database initialized")
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database init error: {e}")
