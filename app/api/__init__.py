@@ -1,3 +1,3 @@
-from app.api import users, events, ratings
+from app.api import users, events, ratings, photos
 
-__all__ = ["users", "events", "ratings"]
+__all__ = ["users", "events", "ratings", "photos"]
