@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.api import users, events, ratings
 from app.database import init_db
 
 @asynccontextmanager
@@ -31,18 +30,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(users.router, prefix="/api/users", tags=["Users"])
-app.include_router(events.router, prefix="/api/events", tags=["Events"])
-app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
-
 @app.get("/")
 async def root():
     return {
         "message": "CarSpot API is running",
-        "version": "1.0.0",
-        "docs": "/docs"
+        "version": "1.0.0"
     }
 
 @app.get("/health")
-async def health_check():
+async def health():
     return {"status": "ok"}
