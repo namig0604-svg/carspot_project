@@ -1,0 +1,124 @@
+═══════════════════════════════════════════════════════════════
+                    📁 СПИСОК ВСЕХ ФАЙЛОВ
+═══════════════════════════════════════════════════════════════
+
+Создай папку C:\CarSpot и положи туда ВСЕ файлы из этого списка:
+
+КОРНЕВЫЕ ФАЙЛЫ (копируй в C:\CarSpot\):
+═══════════════════════════════════════════════════════════════
+□ requirements.txt              (зависимости Python)
+□ docker-compose.yml            (Docker конфиг)
+□ Dockerfile                    (инструкция для Docker)
+□ .env                          (переменные окружения)
+□ README.md                     (описание проекта)
+□ INSTALLATION.md              (инструкция установки)
+□ WINDOWS_SETUP.md             (Windows инструкция)
+□ QUICK_START_WINDOWS.txt      (быстрый старт)
+
+ПАПКА app/ (копируй в C:\CarSpot\app\):
+═══════════════════════════════════════════════════════════════
+□ app/__init__.py
+□ app/main.py                  (главное приложение)
+□ app/config.py                (конфигурация)
+□ app/database.py              (база данных)
+
+ПАПКА app/models/ (копируй в C:\CarSpot\app\models\):
+═══════════════════════════════════════════════════════════════
+□ app/models/__init__.py
+□ app/models/user.py           (модель пользователя)
+□ app/models/event.py          (модель события)
+□ app/models/photo.py          (модель фото)
+□ app/models/rating.py         (модель рейтинга)
+
+ПАПКА app/schemas/ (копируй в C:\CarSpot\app\schemas\):
+═══════════════════════════════════════════════════════════════
+□ app/schemas/__init__.py
+□ app/schemas/user.py          (схема пользователя)
+□ app/schemas/event.py         (схема события)
+□ app/schemas/rating.py        (схема рейтинга)
+
+ПАПКА app/api/ (копируй в C:\CarSpot\app\api\):
+═══════════════════════════════════════════════════════════════
+□ app/api/__init__.py
+□ app/api/users.py             (API пользователей)
+□ app/api/events.py            (API событий)
+□ app/api/ratings.py           (API рейтингов)
+
+ПАПКА app/utils/ (копируй в C:\CarSpot\app\utils\):
+═══════════════════════════════════════════════════════════════
+□ app/utils/__init__.py
+□ app/utils/auth.py            (аутентификация)
+
+ПАПКА CarSpot-iOS/ (копируй в C:\CarSpot\CarSpot-iOS\):
+═══════════════════════════════════════════════════════════════
+□ CarSpot-iOS/ContentView.swift    (главный экран)
+
+ПАПКА CarSpot-iOS/Models/ (копируй в C:\CarSpot\CarSpot-iOS\Models\):
+═══════════════════════════════════════════════════════════════
+□ CarSpot-iOS/Models/Models.swift  (модели данных)
+
+ПАПКА CarSpot-iOS/Services/ (копируй в C:\CarSpot\CarSpot-iOS\Services\):
+═══════════════════════════════════════════════════════════════
+□ CarSpot-iOS/Services/APIService.swift      (работа с API)
+□ CarSpot-iOS/Services/AuthManager.swift     (аутентификация)
+
+ПАПКА CarSpot-iOS/Views/ (копируй в C:\CarSpot\CarSpot-iOS\Views\):
+═══════════════════════════════════════════════════════════════
+□ CarSpot-iOS/Views/AuthenticationView.swift (экран логина)
+□ CarSpot-iOS/Views/MapView.swift            (экран карты)
+□ CarSpot-iOS/Views/EventsListView.swift     (список событий)
+□ CarSpot-iOS/Views/ProfileView.swift        (профиль)
+
+═══════════════════════════════════════════════════════════════
+
+ИТОГО: 31 файл во всех папках
+
+СТРУКТУРА В ИТОГЕ ДОЛЖНА БЫТЬ:
+
+C:\CarSpot\
+├── requirements.txt
+├── docker-compose.yml
+├── Dockerfile
+├── .env
+├── README.md
+├── INSTALLATION.md
+├── WINDOWS_SETUP.md
+├── QUICK_START_WINDOWS.txt
+├── app\
+│   ├── __init__.py
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models\
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   ├── event.py
+│   │   ├── photo.py
+│   │   └── rating.py
+│   ├── schemas\
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   ├── event.py
+│   │   └── rating.py
+│   ├── api\
+│   │   ├── __init__.py
+│   │   ├── users.py
+│   │   ├── events.py
+│   │   └── ratings.py
+│   └── utils\
+│       ├── __init__.py
+│       └── auth.py
+└── CarSpot-iOS\
+    ├── ContentView.swift
+    ├── Models\
+    │   └── Models.swift
+    ├── Services\
+    │   ├── APIService.swift
+    │   └── AuthManager.swift
+    └── Views\
+        ├── AuthenticationView.swift
+        ├── MapView.swift
+        ├── EventsListView.swift
+        └── ProfileView.swift
+
+═══════════════════════════════════════════════════════════════
