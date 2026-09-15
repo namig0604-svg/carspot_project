@@ -7,12 +7,12 @@ from app.database import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting CarSpot API...")
+    print("🚀 Starting CarSpot API...")
     try:
         init_db()
     except Exception as e:
-        print(f"DB init warning: {e}")
-    print("Database initialized")
+        print(f"⚠️ DB init warning: {e}")
+    print("✅ Database initialized")
     yield
     print("🛑 Shutting down CarSpot API...")
 
@@ -31,10 +31,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# API Routes
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Photos"])
+
+# Health Check
 @app.get("/")
 async def root():
     return {
