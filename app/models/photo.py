@@ -5,7 +5,7 @@ from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text, Bool
 from app.database import Base
 
 class Photo(Base):
-    __tablename__ = "photos"
+    __tablename__ = "photos_v2"  # ← НОВОЕ ИМЯ!
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     event_id = Column(String, ForeignKey("events.id"), nullable=False)
