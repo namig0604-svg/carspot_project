@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.database import init_db
-from app.api import photos
+from app.api import users, events, ratings, photos
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +37,9 @@ async def root():
         "message": "CarSpot API is running",
         "version": "1.0.0"
     }
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
+app.include_router(events.router, prefix="/api/events", tags=["Events"])
+app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Photos"])
 @app.get("/health")
 async def health():
