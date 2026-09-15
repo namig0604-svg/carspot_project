@@ -1,83 +1,100 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, status
+﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserLogin, UserResponse
-from app.utils.auth import get_password_hash, verify_password, create_access_token, get_current_active_user
 
 router = APIRouter()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-@router.post("/register", response_model=UserResponse, status_code=201)
-def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Регистрация"""
-    # Проверяем email
-    existing = db.query(User).filter(User.email == user_data.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already exists")
-    
-    # Создаём пользователя
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        hashed_password=get_password_hash(user_data.password),
-        full_name=user_data.full_name,
-        country=user_data.country,
-        city=user_data.city,
-        is_active=True,
-        is_premium=False,
-        average_rating="0.0",
-        events_created=0,
-        events_attended=0
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return new_user
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
-@router.post("/login")
-def login_user(credentials: UserLogin, db: Session = Depends(get_db)):
-    """Вход"""
-    user = db.query(User).filter(User.email == credentials.email).first()
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    if not verify_password(credentials.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    access_token = create_access_token(data={"sub": user.id})
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+@router.post("/register")
+def register(
+    username: str,
+    email: str,
+    password: str,
+    full_name: str,
+    country: str,
+    city: str,
+    db: Session = Depends(get_db)
+):
+    """Регистрация пользователя"""
+    try:
+        # Проверяем уникальность
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Username already exists")
+        
+        # Создаём юзера
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            country=country,
+            city=city
+        )
+        
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        return {
             "id": user.id,
             "username": user.username,
             "email": user.email,
             "full_name": user.full_name,
             "country": user.country,
-            "city": user.city,
-            "is_active": user.is_active,
-            "is_premium": user.is_premium,
-            "average_rating": user.average_rating,
-            "events_created": user.events_created,
-            "events_attended": user.events_attended,
-            "created_at": user.created_at.isoformat()
+            "city": user.city
         }
-    }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_active_user)):
-    """Мой профиль"""
-    return current_user
+@router.post("/login")
+def login(
+    username: str,
+    password: str,
+    db: Session = Depends(get_db)
+):
+    """Вход пользователя"""
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        
+        if not user or not verify_password(password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "message": "Login successful"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{user_id}", response_model=UserResponse)
-def get_user(user_id: str, db: Session = Depends(get_db)):
-    """Получить пользователя"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@router.get("/profile/{user_id}")
+def get_profile(user_id: str, db: Session = Depends(get_db)):
+    """Получить профиль пользователя"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "country": user.country,
+            "city": user.city
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
