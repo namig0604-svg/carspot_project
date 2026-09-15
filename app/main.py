@@ -1,26 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-
-from app.database import init_db
-from app.api import users, events, ratings, photos
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("🚀 Starting CarSpot API...")
-    try:
-        init_db()
-    except Exception as e:
-        print(f"⚠️ DB init warning: {e}")
-    print("✅ Database initialized")
-    yield
-    print("🛑 Shutting down CarSpot API...")
 
 app = FastAPI(
     title="CarSpot API",
-    version="1.0.0",
-    description="API для автомобильных сходок в странах СНГ",
-    lifespan=lifespan
+    version="1.0.0"
 )
 
 app.add_middleware(
@@ -33,14 +16,8 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {
-        "message": "CarSpot API is running",
-        "version": "1.0.0"
-    }
-app.include_router(users.router, prefix="/api/users", tags=["Users"])
-app.include_router(events.router, prefix="/api/events", tags=["Events"])
-app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
-app.include_router(photos.router, prefix="/api/photos", tags=["Photos"])
+    return {"message": "CarSpot API is running", "version": "1.0.0"}
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
