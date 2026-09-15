@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.api import users, events, ratings
-# from app.api import photos  # ВРЕМЕННО ОТКЛЮЧЕНО
 from app.database import init_db
 
 @asynccontextmanager
@@ -32,15 +31,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Routes
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Ratings"])
-app.include_router(photos.router, prefix="/api/photos", tags=["Photos"])
-# app.include_router(photos.router, prefix="/api/photos", tags=["Photos"])  # ВРЕМЕННО
 
-
-# Health Check
 @app.get("/")
 async def root():
     return {
