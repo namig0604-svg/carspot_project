@@ -7,9 +7,12 @@ from app.database import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Starting CarSpot API...")
-    init_db()
-    print("✅ Database initialized")
+    print("Starting CarSpot API...")
+    try:
+        init_db()
+    except Exception as e:
+        print(f"DB init warning: {e}")
+    print("Database initialized")
     yield
     print("🛑 Shutting down CarSpot API...")
 
