@@ -35,7 +35,7 @@ def register(
         user = User(
             username=username,
             email=email,
-            password_hash=hash_password(password),
+            hashed_password=hash_password(password),
             full_name=full_name,
             country=country,
             city=city
@@ -67,7 +67,7 @@ def login(
     try:
         user = db.query(User).filter(User.username == username).first()
         
-        if not user or not verify_password(password, user.password_hash):
+        if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         return {
