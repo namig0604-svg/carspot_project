@@ -30,4 +30,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
 
-settings = Settings()
+try:
+    settings = Settings()
+except:
+    settings = None
