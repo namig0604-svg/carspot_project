@@ -34,8 +34,8 @@ def get_current_user(
     if not user_id:
         raise CREDENTIALS_ERROR
 
-    user = db.query(User).filter(User.id == user_id).first()
-        if not user:
+        user = db.query(User).filter(User.id == user_id).first()
+    if not user:
         raise CREDENTIALS_ERROR
 
     _touch_last_seen(db, user)
@@ -57,9 +57,9 @@ def get_optional_user(
     db: Session = Depends(get_db),
 ) -> Optional[User]:
     """Пользователь, если авторизован. Иначе None — без ошибки."""
-    if not token:
+        if not token:
         return None
-       user_id = decode_access_token(token)
+    user_id = decode_access_token(token)
     if not user_id:
         return None
     user = db.query(User).filter(User.id == user_id).first()
