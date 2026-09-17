@@ -125,9 +125,10 @@ def list_events(
     club_id: Optional[str] = None,
     search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
     only_upcoming: bool = Query(True, description="Только будущие события"),
-    sort: str = Query("date", description="date | popular | rating | new"),
+        sort: str = Query("date", description="date | popular | rating | new"),
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     query = db.query(Event).filter(
         Event.is_active.is_(True),
@@ -147,13 +148,32 @@ def list_events(
     else:
         query = query.order_by(Event.event_date.asc())
 
-    items = query.offset(page.offset).limit(page.limit).all()
+        items = query.offset(page.offset).limit(page.limit).all()
+
+    joined_ids: set = set()
+    if current_user and items:
+        joined_ids = {
+            row[0]
+            for row in db.query(EventParticipant.event_id)
+            .filter(
+                EventParticipant.event_id.in_([e.id for e in items]),
+                EventParticipant.user_id == current_user.id,
+                EventParticipant.status.in_(("going", "maybe")),
+            )
+            .all()
+        }
+
+    out_items = []
+    for e in items:
+        item = EventOut.model_validate(e)
+        item.is_joined = e.id in joined_ids
+        out_items.append(item)
 
     return EventListResponse(
         total=total,
         limit=page.limit,
         offset=page.offset,
-        items=[EventOut.model_validate(e) for e in items],
+        items=out_items,
     )
 
 
