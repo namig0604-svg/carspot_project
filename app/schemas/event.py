@@ -103,7 +103,7 @@ class EventOut(BaseModel):
     ratings_count: int
     views_count: int
 
-       is_active: bool
+    is_active: bool
     is_cancelled: bool
     created_at: datetime
     is_joined: bool = False
