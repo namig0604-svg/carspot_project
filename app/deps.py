@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.base import utcnow
 from app.models.user import User
 from app.security import decode_access_token
 
@@ -34,9 +35,10 @@ def get_current_user(
         raise CREDENTIALS_ERROR
 
     user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+        if not user:
         raise CREDENTIALS_ERROR
 
+    _touch_last_seen(db, user)
     return user
 
 
@@ -57,10 +59,21 @@ def get_optional_user(
     """Пользователь, если авторизован. Иначе None — без ошибки."""
     if not token:
         return None
-    user_id = decode_access_token(token)
+       user_id = decode_access_token(token)
     if not user_id:
         return None
-    return db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        _touch_last_seen(db, user)
+    return user
+
+
+def _touch_last_seen(db: Session, user: User) -> None:
+    """Обновляет last_seen_at не чаще раза в минуту, чтобы не долбить БД на каждый запрос."""
+    now = utcnow()
+    if not user.last_seen_at or (now - user.last_seen_at).total_seconds() >= 60:
+        user.last_seen_at = now
+        db.commit()
 
 
 class Pagination:
