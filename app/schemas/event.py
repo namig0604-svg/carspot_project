@@ -103,9 +103,10 @@ class EventOut(BaseModel):
     ratings_count: int
     views_count: int
 
-    is_active: bool
+       is_active: bool
     is_cancelled: bool
     created_at: datetime
+    is_joined: bool = False
 
 
 class EventDetail(EventOut):
@@ -113,7 +114,6 @@ class EventDetail(EventOut):
 
     creator: Optional[UserPublic] = None
     chat_room_id: Optional[str] = None
-    is_joined: bool = False
     is_creator: bool = False
     my_rating: Optional[int] = None
 
