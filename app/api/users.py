@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
 from app.models.car import Car
+from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
 from app.models.user import User
 from app.schemas.car import CarOut
@@ -85,6 +86,43 @@ def get_user_cars(user_id: str, db: Session = Depends(get_db)):
         .order_by(Car.is_primary.desc(), Car.created_at.desc())
         .all()
     )
+
+
+@router.get(
+    "/{user_id}/clubs",
+    summary="Клубы пользователя и его роль в каждом",
+)
+def get_user_clubs(user_id: str, db: Session = Depends(get_db)):
+    if not db.query(User.id).filter(User.id == user_id).first():
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    memberships = (
+        db.query(ClubMember)
+        .filter(ClubMember.user_id == user_id, ClubMember.status == "approved")
+        .all()
+    )
+    if not memberships:
+        return []
+
+    clubs = {
+        c.id: c
+        for c in db.query(Club).filter(Club.id.in_([m.club_id for m in memberships])).all()
+    }
+
+    result = []
+    for m in memberships:
+        club = clubs.get(m.club_id)
+        if not club:
+            continue
+        result.append(
+            {
+                "club_id": club.id,
+                "name": club.name,
+                "logo_url": club.logo_url,
+                "role": m.role,
+            }
+        )
+    return result
 
 
 @router.get(
