@@ -1,56 +1,53 @@
+﻿"""
+Подключение к БД. Работает и с PostgreSQL, и с SQLite.
+Инициализация ЛЕНИВА — не падает на импорте если БД недоступна.
 """
-Подключение к базе данных.
-
-Работает и с PostgreSQL (Railway / Docker), и с SQLite (локальная разработка).
-Строка подключения берётся из DATABASE_URL.
-"""
-from sqlalchemy import create_engine, event as _sa_event
+from sqlalchemy import create_engine, event as _sa_event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
-
 from app.config import settings
 
+DATABASE_URL = (settings.DATABASE_URL or "").strip()
+if not DATABASE_URL:
+    DATABASE_URL = "sqlite:///./carspot.db"
 
-def _normalize_db_url(url: str) -> str:
-    """Приводит строку подключения к виду, который понимает SQLAlchemy."""
-    url = (url or "").strip()
+# Нормализация
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql://") and "postgresql+psycopg2" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-    if not url:
-        return "sqlite:///./carspot.db"
-
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
-    elif url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
-
-    return url
-
-
-DATABASE_URL = _normalize_db_url(settings.DATABASE_URL)
+# Убираем TRAILING пробелы
+DATABASE_URL = DATABASE_URL.rstrip()
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=_connect_args,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    echo=settings.DEBUG,
-)
+try:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args=_connect_args,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        echo=settings.DEBUG,
+    )
+    
+    # SQLite: Unicode lower()
+    if DATABASE_URL.startswith("sqlite"):
+        @_sa_event.listens_for(engine, "connect")
+        def _register_unicode_lower(dbapi_connection, _record):
+            dbapi_connection.create_function(
+                "lower", 1, lambda value: value.lower() if isinstance(value, str) else value
+            )
+except Exception as e:
+    print(f"[DB] Ошибка создания engine: {e}")
+    engine = None
 
-# SQLite: Unicode-aware lower()
-if DATABASE_URL.startswith("sqlite"):
-    @_sa_event.listens_for(engine, "connect")
-    def _register_unicode_lower(dbapi_connection, _record):
-        dbapi_connection.create_function(
-            "lower", 1, lambda value: value.lower() if isinstance(value, str) else value
-        )
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 Base = declarative_base()
 
 
 def get_db():
-    """FastAPI-зависимость: сессия БД на один запрос."""
+    if not engine or not SessionLocal:
+        raise RuntimeError("Database not initialized")
     db = SessionLocal()
     try:
         yield db
@@ -59,20 +56,22 @@ def get_db():
 
 
 def init_db() -> bool:
-    """Создаёт все таблицы, которых ещё нет."""
+    if not engine:
+        print("[DB] Engine не инициализирован")
+        return False
     try:
-        from app import models  # noqa: F401
+        from app import models
         Base.metadata.create_all(bind=engine)
         print("[DB] Таблицы готовы")
         return True
     except Exception as exc:
-        print(f"[DB] Не удалось инициализировать БД: {exc}")
+        print(f"[DB] Ошибка init_db: {exc}")
         return False
 
 
 def db_is_alive() -> bool:
-    """Проверка живости БД для /health."""
-    from sqlalchemy import text
+    if not engine:
+        return False
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
