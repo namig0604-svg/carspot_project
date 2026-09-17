@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import Optional
-
+ 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
-
+ 
+ 
 class UserRegister(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, examples=["namig"])
     email: EmailStr = Field(..., examples=["namig@example.com"])
@@ -11,13 +11,13 @@ class UserRegister(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100, examples=["Namig Nabiev"])
     country: Optional[str] = Field(None, max_length=50, examples=["Georgia"])
     city: Optional[str] = Field(None, max_length=100, examples=["Tbilisi"])
-
-
+ 
+ 
 class UserLogin(BaseModel):
     username: str = Field(..., description="Имя пользователя или email")
     password: str
-
-
+ 
+ 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100)
     bio: Optional[str] = None
@@ -26,18 +26,18 @@ class UserUpdate(BaseModel):
     country: Optional[str] = Field(None, max_length=50)
     city: Optional[str] = Field(None, max_length=100)
     instagram: Optional[str] = Field(None, max_length=100)
-
-
+ 
+ 
 class PasswordChange(BaseModel):
     old_password: str
     new_password: str = Field(..., min_length=6, max_length=72)
-
-
+ 
+ 
 class UserPublic(BaseModel):
     """Профиль, видимый другим пользователям."""
-
+ 
     model_config = ConfigDict(from_attributes=True)
-
+ 
     id: str
     username: str
     full_name: Optional[str] = None
@@ -46,7 +46,7 @@ class UserPublic(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     instagram: Optional[str] = None
-        is_verified: bool = False
+    is_verified: bool = False
     is_premium: bool = False
     is_online: bool = False
     average_rating: float = 0.0
@@ -55,19 +55,21 @@ class UserPublic(BaseModel):
     events_attended: int = 0
     cars_count: int = 0
     created_at: datetime
-
-
+ 
+ 
 class UserMe(UserPublic):
     """Собственный профиль — с приватными полями."""
-
+ 
     email: EmailStr
     phone: Optional[str] = None
     is_active: bool = True
     is_admin: bool = False
-
-
+ 
+ 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
     user: UserMe
+ 
+
