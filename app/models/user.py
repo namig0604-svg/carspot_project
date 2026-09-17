@@ -1,7 +1,11 @@
+from datetime import timedelta
+
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
 
 from app.database import Base
 from app.models.base import new_id, utcnow
+# Считаем юзера "онлайн", если он делал запрос к API в последние N минут
+ONLINE_THRESHOLD_MINUTES = 5
 
 
 class User(Base):
@@ -39,4 +43,10 @@ class User(Base):
     # --- Служебное ---
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
-    last_seen_at = Column(DateTime, default=utcnow, nullable=True)
+    last_seen_at = Column(DateTime, default=utcnow, nullable=True) 
+    @property
+    def is_online(self) -> bool:
+        """Онлайн = делал авторизованный запрос за последние ONLINE_THRESHOLD_MINUTES."""
+        if not self.last_seen_at:
+            return False
+        return (utcnow() - self.last_seen_at) <= timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
