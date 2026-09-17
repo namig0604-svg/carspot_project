@@ -1,29 +1,72 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
-class UserBase(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    email: EmailStr
-    full_name: Optional[str] = Field(None, max_length=100)
-    country: Optional[str] = None
-    city: Optional[str] = None
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+
+class UserRegister(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, examples=["namig"])
+    email: EmailStr = Field(..., examples=["namig@example.com"])
+    password: str = Field(..., min_length=6, max_length=72, examples=["SuperPass123"])
+    full_name: Optional[str] = Field(None, max_length=100, examples=["Namig Nabiev"])
+    country: Optional[str] = Field(None, max_length=50, examples=["Georgia"])
+    city: Optional[str] = Field(None, max_length=100, examples=["Tbilisi"])
+
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: str = Field(..., description="Имя пользователя или email")
     password: str
 
-class UserResponse(UserBase):
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=100)
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = Field(None, max_length=500)
+    phone: Optional[str] = Field(None, max_length=30)
+    country: Optional[str] = Field(None, max_length=50)
+    city: Optional[str] = Field(None, max_length=100)
+    instagram: Optional[str] = Field(None, max_length=100)
+
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str = Field(..., min_length=6, max_length=72)
+
+
+class UserPublic(BaseModel):
+    """Профиль, видимый другим пользователям."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
-    is_active: bool
-    is_premium: bool
-    average_rating: str
-    events_created: int
-    events_attended: int
+    username: str
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    instagram: Optional[str] = None
+    is_verified: bool = False
+    is_premium: bool = False
+    average_rating: float = 0.0
+    ratings_count: int = 0
+    events_created: int = 0
+    events_attended: int = 0
+    cars_count: int = 0
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
+
+
+class UserMe(UserPublic):
+    """Собственный профиль — с приватными полями."""
+
+    email: EmailStr
+    phone: Optional[str] = None
+    is_active: bool = True
+    is_admin: bool = False
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserMe

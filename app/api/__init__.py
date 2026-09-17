@@ -1,1 +1,1 @@
-# API routers
+"""Роутеры REST API."""
