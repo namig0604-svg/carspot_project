@@ -46,8 +46,9 @@ class UserPublic(BaseModel):
     country: Optional[str] = None
     city: Optional[str] = None
     instagram: Optional[str] = None
-    is_verified: bool = False
+        is_verified: bool = False
     is_premium: bool = False
+    is_online: bool = False
     average_rating: float = 0.0
     ratings_count: int = 0
     events_created: int = 0
