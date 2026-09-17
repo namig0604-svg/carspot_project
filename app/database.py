@@ -18,6 +18,9 @@ elif DATABASE_URL.startswith("postgresql://") and "postgresql+psycopg2" not in D
 
 # Убираем TRAILING пробелы
 DATABASE_URL = DATABASE_URL.rstrip()
+# Убираем двойную схему если случайно добавилась
+if DATABASE_URL.startswith("postgresql:postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql:postgresql://", "postgresql+psycopg2://", 1)
 
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
