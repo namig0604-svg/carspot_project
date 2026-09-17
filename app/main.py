@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
     print(f"[APP] Запуск {settings.APP_NAME} v{settings.APP_VERSION}")
 
     # Инициализация БД не должна ронять приложение
-    init_db()
+    init_db()  # ← ЭТА СТРОКА ДОЛЖНА БЫТЬ
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
