@@ -1,15 +1,17 @@
 """
 Автосервисы и тюнинг-ателье: каталог, карта, отзывы, избранное.
 """
+from datetime import timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
+from app.models.base import utcnow
 from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.user import User
 from app.schemas.business import (
@@ -67,6 +69,12 @@ def create_business(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Добавлять автосервисы и ателье могут только подписчики CarSpot Premium",
+        )
+
     business = Business(owner_id=current_user.id, **payload.model_dump())
     db.add(business)
     db.commit()
@@ -108,14 +116,17 @@ def list_businesses(
 
     total = query.count()
 
+    # Бустнутые Premium-заведения всегда всплывают в топ каталога на BOOST_DURATION_HOURS часов.
+    boosted_rank = case((Business.boosted_until > utcnow(), 0), else_=1)
+
     if sort == "new":
-        query = query.order_by(Business.created_at.desc())
+        query = query.order_by(boosted_rank, Business.created_at.desc())
     elif sort == "reviews":
-        query = query.order_by(Business.reviews_count.desc(), Business.average_rating.desc())
+        query = query.order_by(boosted_rank, Business.reviews_count.desc(), Business.average_rating.desc())
     elif sort == "name":
-        query = query.order_by(Business.name.asc())
+        query = query.order_by(boosted_rank, Business.name.asc())
     else:
-        query = query.order_by(Business.average_rating.desc(), Business.reviews_count.desc())
+        query = query.order_by(boosted_rank, Business.average_rating.desc(), Business.reviews_count.desc())
 
     items = query.offset(page.offset).limit(page.limit).all()
 
@@ -297,6 +308,37 @@ def update_business(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(business, field, value)
 
+    db.commit()
+    db.refresh(business)
+    return business
+
+
+@router.post(
+    "/{business_id}/boost",
+    response_model=BusinessOut,
+    summary=f"Поднять заведение в топ каталога на {settings.BOOST_DURATION_HOURS} ч. (Premium)",
+)
+def boost_business(
+    business_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    business = _get_business_or_404(db, business_id)
+    _require_owner(business, current_user)
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Поднимать заведение в топ каталога могут только подписчики CarSpot Premium",
+        )
+
+    now = utcnow()
+    if business.boosted_until and business.boosted_until > now:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Буст уже активен до {business.boosted_until.isoformat()}",
+        )
+
+    business.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
     db.commit()
     db.refresh(business)
     return business
