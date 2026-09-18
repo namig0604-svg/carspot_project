@@ -171,7 +171,7 @@ def car_photos(
     items = (
         db.query(Photo)
         .filter(Photo.car_id == car_id, Photo.is_approved.is_(True))
-        .order_by(Photo.created_at.desc())
+        .order_by(Photo.is_featured.desc(), Photo.created_at.desc())
         .all()
     )
     liked_ids = _liked_photo_ids(db, current_user, [p.id for p in items])
@@ -211,6 +211,32 @@ def toggle_like(
     db.commit()
     db.refresh(photo)
     return {"liked": liked, "likes_count": photo.likes_count}
+
+
+@router.post(
+    "/{photo_id}/feature",
+    summary="Закрепить/снять закрепление фото сверху галереи (только Premium)",
+)
+def toggle_feature(
+    photo_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+    if photo.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Это не ваше фото")
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Закреплять фото сверху галереи могут только подписчики CarSpot Premium",
+        )
+
+    photo.is_featured = not photo.is_featured
+    db.commit()
+    db.refresh(photo)
+    return {"is_featured": photo.is_featured}
 
 
 @router.delete("/{photo_id}", summary="Удалить фото")
