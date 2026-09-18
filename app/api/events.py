@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -166,14 +166,18 @@ def list_events(
 
     total = query.count()
 
+    # Бустнутые Premium-сходки всегда всплывают в топ ленты (на BOOST_DURATION_HOURS часов),
+    # независимо от выбранной сортировки — а внутри этой группы порядок обычный.
+    boosted_rank = case((Event.boosted_until > utcnow(), 0), else_=1)
+
     if sort == "popular":
-        query = query.order_by(Event.participants_count.desc(), Event.event_date.asc())
+        query = query.order_by(boosted_rank, Event.participants_count.desc(), Event.event_date.asc())
     elif sort == "rating":
-        query = query.order_by(Event.average_rating.desc(), Event.ratings_count.desc())
+        query = query.order_by(boosted_rank, Event.average_rating.desc(), Event.ratings_count.desc())
     elif sort == "new":
-        query = query.order_by(Event.created_at.desc())
+        query = query.order_by(boosted_rank, Event.created_at.desc())
     else:
-        query = query.order_by(Event.event_date.asc())
+        query = query.order_by(boosted_rank, Event.event_date.asc())
 
     items = query.offset(page.offset).limit(page.limit).all()
 
@@ -356,6 +360,40 @@ def update_event(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(event, field, value)
 
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.post(
+    "/{event_id}/boost",
+    response_model=EventOut,
+    summary=f"Поднять сходку в топ ленты на {settings.BOOST_DURATION_HOURS} ч. (Premium)",
+)
+def boost_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    if event.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Только создатель может продвигать сходку")
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Поднимать сходки в топ ленты могут только подписчики CarSpot Premium",
+        )
+
+    now = utcnow()
+    if event.boosted_until and event.boosted_until > now:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Буст уже активен до {event.boosted_until.isoformat()}",
+        )
+
+    event.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
     db.commit()
     db.refresh(event)
     return event
