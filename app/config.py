@@ -49,5 +49,17 @@ class Settings:
     MAX_CARS_PER_USER: int = _get_int("MAX_CARS_PER_USER", 10)
     DEFAULT_SEARCH_RADIUS_KM: float = float(os.getenv("DEFAULT_SEARCH_RADIUS_KM", "50"))
 
+    # --- CarSpot Premium ---
+    # Больше машин в гараже, закреплённые фото, добавление автосервисов.
+    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 25)
+    PREMIUM_TRIAL_DAYS: int = _get_int("PREMIUM_TRIAL_DAYS", 14)
+    # За каждые REFERRALS_PER_PREMIUM_MONTH приглашённых друзей — PREMIUM_MONTH_DAYS Premium.
+    REFERRALS_PER_PREMIUM_MONTH: int = _get_int("REFERRALS_PER_PREMIUM_MONTH", 10)
+    PREMIUM_MONTH_DAYS: int = _get_int("PREMIUM_MONTH_DAYS", 30)
+    # На сколько часов "буст" поднимает сходку/автосервис в топ ленты и каталога.
+    BOOST_DURATION_HOURS: int = _get_int("BOOST_DURATION_HOURS", 24)
+    # Сколько строк отдаём в списках "кто лайкнул" / "кто смотрел профиль".
+    PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 50)
+
 
 settings = Settings()
