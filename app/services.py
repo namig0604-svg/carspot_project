@@ -24,6 +24,13 @@ def direct_key_for(user_a: str, user_b: str) -> str:
     return ":".join(sorted([str(user_a), str(user_b)]))
 
 
+# ─────────────────────────── ДРУЗЬЯ ───────────────────────────
+
+def pair_key_for(user_a: str, user_b: str) -> str:
+    """Уникальный ключ пары для дружбы — как direct_key_for, но для friendships."""
+    return ":".join(sorted([str(user_a), str(user_b)]))
+
+
 def get_or_create_event_room(db: Session, event: Event) -> ChatRoom:
     """Чат сходки. Создаётся автоматически вместе с событием."""
     room = db.query(ChatRoom).filter(ChatRoom.event_id == event.id).first()
