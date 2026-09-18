@@ -30,6 +30,7 @@ API для поиска и организации автомобильных с�
 * **Чаты** — личные, чаты сходок и клубов + WebSocket
 * **Рейтинги** — оценки сходок, пользователей и спотов
 * **Фото** — загрузка к сходкам и машинам, лайки
+* **Жалобы и модерация** — жалобы на пользователей/контент, блокировка (для админов)
 
 ### Как авторизоваться в этой документации
 1. Выполните `POST /api/auth/register` или `/api/auth/login`
@@ -108,7 +109,19 @@ def health():
 
 # ─────────────────────────── РОУТЕРЫ ───────────────────────────
 
-from app.api import auth, businesses, cars, chats, clubs, events, photos, ratings, users  # noqa: E402
+from app.api import (  # noqa: E402
+    admin,
+    auth,
+    businesses,
+    cars,
+    chats,
+    clubs,
+    events,
+    photos,
+    ratings,
+    reports,
+    users,
+)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
 app.include_router(users.router, prefix="/api/users", tags=["Пользователи"])
@@ -119,3 +132,5 @@ app.include_router(businesses.router, prefix="/api/businesses", tags=["Авто�
 app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
+app.include_router(reports.router, prefix="/api/reports", tags=["Жалобы"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Админка"])
