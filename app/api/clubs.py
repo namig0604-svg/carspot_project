@@ -12,10 +12,12 @@ from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
 from app.models.event import Event
+from app.models.rating import EventRating
 from app.models.user import User
 from app.schemas.club import (
     ClubCreate,
     ClubDetail,
+    ClubLeaderboardOut,
     ClubListResponse,
     ClubMemberOut,
     ClubOut,
@@ -159,6 +161,79 @@ def my_clubs(
     if not club_ids:
         return []
     return db.query(Club).filter(Club.id.in_(club_ids)).order_by(Club.name.asc()).all()
+
+
+@router.get(
+    "/leaderboard",
+    response_model=List[ClubLeaderboardOut],
+    summary="Рейтинг клубов",
+)
+def clubs_leaderboard(
+    limit: int = Query(100, ge=1, le=300),
+    db: Session = Depends(get_db),
+):
+    """
+    Рейтинг автоклубов по активности: живые счётчики участников и сходок
+    (а не денормализованные Club.members_count/events_count — те не всегда
+    актуальны) плюс средний рейтинг сходок клуба.
+
+    Очки клуба: события — основной вклад в активность, участники и оценки —
+    вспомогательные множители. Формула специфична для этого рейтинга и не
+    связана с формулой XP пользователей.
+    """
+    clubs = db.query(Club).all()
+    if not clubs:
+        return []
+
+    club_ids = [c.id for c in clubs]
+
+    members_map = dict(
+        db.query(ClubMember.club_id, func.count(ClubMember.id))
+        .filter(ClubMember.club_id.in_(club_ids), ClubMember.status == "approved")
+        .group_by(ClubMember.club_id)
+        .all()
+    )
+
+    events_map = dict(
+        db.query(Event.club_id, func.count(Event.id))
+        .filter(Event.club_id.in_(club_ids), Event.is_active.is_(True))
+        .group_by(Event.club_id)
+        .all()
+    )
+
+    rating_rows = (
+        db.query(Event.club_id, func.avg(EventRating.rating))
+        .join(EventRating, EventRating.event_id == Event.id)
+        .filter(Event.club_id.in_(club_ids))
+        .group_by(Event.club_id)
+        .all()
+    )
+    rating_map = {row[0]: float(row[1]) for row in rating_rows if row[1] is not None}
+
+    items = []
+    for club in clubs:
+        members = members_map.get(club.id, 0)
+        events = events_map.get(club.id, 0)
+        average_rating = round(rating_map.get(club.id, 0.0), 2)
+        score = events * 30 + members * 4 + round(average_rating * 10)
+
+        items.append(
+            ClubLeaderboardOut(
+                id=club.id,
+                name=club.name,
+                logo_url=club.logo_url,
+                country=club.country,
+                city=club.city,
+                is_verified=club.is_verified,
+                members_count=members,
+                events_count=events,
+                average_rating=average_rating,
+                score=score,
+            )
+        )
+
+    items.sort(key=lambda x: x.score, reverse=True)
+    return items[:limit]
 
 
 @router.get("/{club_id}", response_model=ClubDetail, summary="Карточка клуба")
