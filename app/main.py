@@ -29,6 +29,8 @@ API для поиска и организации автомобильных с�
 * **Автосервисы и ателье** — каталог, карта рядом, отзывы, избранное
 * **Чаты** — личные, чаты сходок и клубов + WebSocket
 * **Друзья** — заявки в друзья, список друзей
+* **Уведомления** — лента событий: заявки, лайки, участие в сходках, комментарии
+* **Платежи** — оплата Premium через Trybit (крипто-эквайринг для СНГ)
 * **Рейтинги** — оценки сходок, пользователей и спотов
 * **Фото** — загрузка к сходкам и машинам, лайки
 * **Жалобы и модерация** — жалобы на пользователей/контент, блокировка (для админов)
@@ -119,6 +121,8 @@ from app.api import (  # noqa: E402
     clubs,
     events,
     friends,
+    notifications,
+    payments,
     photos,
     ratings,
     reports,
@@ -133,6 +137,8 @@ app.include_router(clubs.router, prefix="/api/clubs", tags=["Клубы"])
 app.include_router(businesses.router, prefix="/api/businesses", tags=["Автосервисы"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
 app.include_router(friends.router, prefix="/api/friends", tags=["Друзья"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Уведомления"])
+app.include_router(payments.router, prefix="/api/payments", tags=["Платежи"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Жалобы"])
