@@ -1,200 +1,527 @@
 """
-Профили пользователей.
+Сходки: создание, поиск, карта, участники.
 """
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
-from app.deps import Pagination, get_current_active_user
+from app.deps import Pagination, get_current_active_user, get_optional_user
+from app.models.base import utcnow
 from app.models.car import Car
-from app.models.club import Club, ClubMember
+from app.models.chat import ChatRoom
+from app.models.club import ClubMember
 from app.models.event import Event, EventParticipant
+from app.models.rating import EventRating
 from app.models.user import User
-from app.schemas.car import CarOut
-from app.schemas.event import EventOut
-from app.schemas.user import ReferralInfo, UserMe, UserPublic, UserUpdate
+from app.schemas.event import (
+    EventCreate,
+    EventDetail,
+    EventListResponse,
+    EventMapMarker,
+    EventOut,
+    EventUpdate,
+    JoinEventRequest,
+    ParticipantOut,
+)
+from app.schemas.user import UserPublic
+from app.services import (
+    add_room_member,
+    get_or_create_event_room,
+    post_system_message,
+    remove_room_member,
+    users_by_ids,
+)
+from app.utils.geo import bounding_box, haversine_km
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[UserPublic], summary="Поиск пользователей")
-def search_users(
-    q: Optional[str] = Query(None, description="Поиск по имени/логину"),
-    country: Optional[str] = None,
-    city: Optional[str] = None,
-    page: Pagination = Depends(),
-    db: Session = Depends(get_db),
-):
-    query = db.query(User).filter(User.is_active.is_(True))
-
-    if q:
-        pattern = f"%{q.strip()}%"
-        query = query.filter(
-            or_(User.username.ilike(pattern), User.full_name.ilike(pattern))
-        )
-    if country:
-        query = query.filter(func.lower(User.country) == country.lower())
-    if city:
-        query = query.filter(func.lower(User.city) == city.lower())
-
+def _is_approved_club_member(db: Session, club_id: str, user_id: str) -> bool:
     return (
-        query.order_by(User.average_rating.desc(), User.created_at.desc())
-        .offset(page.offset)
-        .limit(page.limit)
-        .all()
+        db.query(ClubMember.id)
+        .filter(
+            ClubMember.club_id == club_id,
+            ClubMember.user_id == user_id,
+            ClubMember.status == "approved",
+        )
+        .first()
+        is not None
     )
 
 
-@router.patch("/me", response_model=UserMe, summary="Обновить свой профиль")
-def update_me(
-    payload: UserUpdate,
+def _can_view_private_event(db: Session, event: Event, user: Optional[User]) -> bool:
+    """Приватное событие видно создателю, админу и участникам клуба (если это клубное событие)."""
+    if not user:
+        return False
+    if event.creator_id == user.id or user.is_admin:
+        return True
+    if event.club_id and _is_approved_club_member(db, event.club_id, user.id):
+        return True
+    return False
+
+
+def _apply_filters(query, event_type, country, city, club_id, search, only_upcoming):
+    if event_type:
+        query = query.filter(Event.event_type == event_type)
+    if country:
+        query = query.filter(func.lower(Event.country) == country.lower())
+    if city:
+        query = query.filter(func.lower(Event.city) == city.lower())
+    if club_id:
+        query = query.filter(Event.club_id == club_id)
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Event.title.ilike(pattern),
+                Event.description.ilike(pattern),
+                Event.location_name.ilike(pattern),
+            )
+        )
+    if only_upcoming:
+        query = query.filter(Event.event_date >= utcnow() - timedelta(hours=6))
+    return query
+
+
+@router.post(
+    "/",
+    response_model=EventDetail,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать сходку",
+)
+def create_event(
+    payload: EventCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    data = payload.model_dump(exclude_unset=True)
-
-    if "username" in data and data["username"]:
-        new_username = data["username"].strip()
-        conflict = (
-            db.query(User)
-            .filter(func.lower(User.username) == new_username.lower(), User.id != current_user.id)
+    # Если событие от клуба — проверяем права
+    if payload.club_id:
+        membership = (
+            db.query(ClubMember)
+            .filter(
+                ClubMember.club_id == payload.club_id,
+                ClubMember.user_id == current_user.id,
+                ClubMember.status == "approved",
+            )
             .first()
         )
-        if conflict:
-            raise HTTPException(status_code=400, detail="Такой юзернейм уже занят")
-        data["username"] = new_username
+        if not membership or membership.role not in ("owner", "admin"):
+            raise HTTPException(
+                status_code=403,
+                detail="Создавать события клуба могут только владелец и админы",
+            )
 
-    for field, value in data.items():
-        setattr(current_user, field, value)
+    event = Event(creator_id=current_user.id, **payload.model_dump())
+    db.add(event)
+    db.flush()
+
+    # Создатель автоматически участник
+    db.add(EventParticipant(event_id=event.id, user_id=current_user.id, status="going"))
+    event.participants_count = 1
+
+    # Чат сходки
+    room = get_or_create_event_room(db, event)
+
+    current_user.events_created = (current_user.events_created or 0) + 1
+    current_user.events_attended = (current_user.events_attended or 0) + 1
 
     db.commit()
-    db.refresh(current_user)
-    return current_user
+    db.refresh(event)
+
+    detail = EventDetail.model_validate(event)
+    detail.creator = UserPublic.model_validate(current_user)
+    detail.chat_room_id = room.id
+    detail.is_joined = True
+    detail.is_creator = True
+    return detail
 
 
-@router.get("/me/referral", response_model=ReferralInfo, summary="Свой реферальный код и число приглашённых")
-def get_my_referral(
+@router.get("/", response_model=EventListResponse, summary="Список сходок")
+def list_events(
+    event_type: Optional[str] = Query(None, description="meetup / racing / drift ..."),
+    country: Optional[str] = None,
+    city: Optional[str] = None,
+    club_id: Optional[str] = None,
+    search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
+    only_upcoming: bool = Query(True, description="Только будущие события"),
+        sort: str = Query("date", description="date | popular | rating | new"),
+    page: Pagination = Depends(),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    query = db.query(Event).filter(
+        Event.is_active.is_(True),
+        Event.is_cancelled.is_(False),
+        Event.is_private.is_(False),
+    )
+    query = _apply_filters(query, event_type, country, city, club_id, search, only_upcoming)
+
+    total = query.count()
+
+    if sort == "popular":
+        query = query.order_by(Event.participants_count.desc(), Event.event_date.asc())
+    elif sort == "rating":
+        query = query.order_by(Event.average_rating.desc(), Event.ratings_count.desc())
+    elif sort == "new":
+        query = query.order_by(Event.created_at.desc())
+    else:
+        query = query.order_by(Event.event_date.asc())
+
+        items = query.offset(page.offset).limit(page.limit).all()
+
+    joined_ids: set = set()
+    if current_user and items:
+        joined_ids = {
+            row[0]
+            for row in db.query(EventParticipant.event_id)
+            .filter(
+                EventParticipant.event_id.in_([e.id for e in items]),
+                EventParticipant.user_id == current_user.id,
+                EventParticipant.status.in_(("going", "maybe")),
+            )
+            .all()
+        }
+
+    out_items = []
+    for e in items:
+        item = EventOut.model_validate(e)
+        item.is_joined = e.id in joined_ids
+        out_items.append(item)
+
+    return EventListResponse(
+        total=total,
+        limit=page.limit,
+        offset=page.offset,
+        items=out_items,
+    )
+
+
+@router.get(
+    "/map",
+    response_model=List[EventMapMarker],
+    summary="Метки для карты в видимой области",
+)
+def events_for_map(
+    min_lat: float = Query(..., ge=-90, le=90),
+    max_lat: float = Query(..., ge=-90, le=90),
+    min_lon: float = Query(..., ge=-180, le=180),
+    max_lon: float = Query(..., ge=-180, le=180),
+    event_type: Optional[str] = None,
+    only_upcoming: bool = True,
+    limit: int = Query(300, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """
+    Отдаёт лёгкие метки для отображения на карте.
+    Клиент передаёт границы видимой области карты.
+    """
+    query = db.query(Event).filter(
+        Event.is_active.is_(True),
+        Event.is_cancelled.is_(False),
+        Event.is_private.is_(False),
+        Event.latitude.between(min(min_lat, max_lat), max(min_lat, max_lat)),
+        Event.longitude.between(min(min_lon, max_lon), max(min_lon, max_lon)),
+    )
+    if event_type:
+        query = query.filter(Event.event_type == event_type)
+    if only_upcoming:
+        query = query.filter(Event.event_date >= utcnow() - timedelta(hours=6))
+
+    events = query.order_by(Event.event_date.asc()).limit(limit).all()
+    return [EventMapMarker.model_validate(e) for e in events]
+
+
+@router.get(
+    "/nearby",
+    response_model=List[EventMapMarker],
+    summary="Сходки рядом со мной",
+)
+def events_nearby(
+    latitude: float = Query(..., ge=-90, le=90, description="Широта пользователя"),
+    longitude: float = Query(..., ge=-180, le=180, description="Долгота пользователя"),
+    radius_km: float = Query(None, ge=0.1, le=2000, description="Радиус поиска в км"),
+    event_type: Optional[str] = None,
+    only_upcoming: bool = True,
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """
+    Ищет события в радиусе. Сначала быстрый отсев по прямоугольнику (по индексу),
+    затем точный расчёт расстояния по формуле гаверсинуса.
+    """
+    radius = radius_km or settings.DEFAULT_SEARCH_RADIUS_KM
+    min_lat, max_lat, min_lon, max_lon = bounding_box(latitude, longitude, radius)
+
+    query = db.query(Event).filter(
+        Event.is_active.is_(True),
+        Event.is_cancelled.is_(False),
+        Event.is_private.is_(False),
+        Event.latitude.between(min_lat, max_lat),
+        Event.longitude.between(min_lon, max_lon),
+    )
+    if event_type:
+        query = query.filter(Event.event_type == event_type)
+    if only_upcoming:
+        query = query.filter(Event.event_date >= utcnow() - timedelta(hours=6))
+
+    candidates = query.limit(2000).all()
+
+    result = []
+    for event in candidates:
+        distance = haversine_km(latitude, longitude, event.latitude, event.longitude)
+        if distance <= radius:
+            marker = EventMapMarker.model_validate(event)
+            marker.distance_km = round(distance, 2)
+            result.append(marker)
+
+    result.sort(key=lambda m: m.distance_km or 0)
+    return result[:limit]
+
+
+@router.get("/{event_id}", response_model=EventDetail, summary="Карточка сходки")
+def get_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+
+    if event.is_private and not _can_view_private_event(db, event, current_user):
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+
+    event.views_count = (event.views_count or 0) + 1
+    db.commit()
+    db.refresh(event)
+
+    detail = EventDetail.model_validate(event)
+
+    creator = db.query(User).filter(User.id == event.creator_id).first()
+    if creator:
+        detail.creator = UserPublic.model_validate(creator)
+
+    room = db.query(ChatRoom).filter(ChatRoom.event_id == event.id).first()
+    detail.chat_room_id = room.id if room else None
+
+    if current_user:
+        detail.is_creator = event.creator_id == current_user.id
+        detail.is_joined = (
+            db.query(EventParticipant.id)
+            .filter(
+                EventParticipant.event_id == event.id,
+                EventParticipant.user_id == current_user.id,
+                EventParticipant.status.in_(("going", "maybe")),
+            )
+            .first()
+            is not None
+        )
+        my_rating = (
+            db.query(EventRating)
+            .filter(EventRating.event_id == event.id, EventRating.user_id == current_user.id)
+            .first()
+        )
+        detail.my_rating = my_rating.rating if my_rating else None
+
+    return detail
+
+
+@router.patch("/{event_id}", response_model=EventOut, summary="Изменить сходку")
+def update_event(
+    event_id: str,
+    payload: EventUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    referrals_count = (
-        db.query(User).filter(User.referred_by_id == current_user.id).count()
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    if event.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Только создатель может изменить событие")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(event, field, value)
+
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.delete("/{event_id}", summary="Удалить (отменить) сходку")
+def delete_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    if event.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Только создатель может удалить событие")
+
+    event.is_active = False
+    event.is_cancelled = True
+    db.commit()
+    return {"message": "Событие отменено", "event_id": event_id}
+
+
+# ─────────────────────────── УЧАСТНИКИ ───────────────────────────
+
+@router.post("/{event_id}/join", summary="Пойду на сходку")
+def join_event(
+    event_id: str,
+    payload: JoinEventRequest = JoinEventRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    if event.is_cancelled or not event.is_active:
+        raise HTTPException(status_code=400, detail="Событие отменено")
+
+    if event.is_private and not _can_view_private_event(db, event, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Это закрытое событие — доступно только участникам клуба",
+        )
+
+    # Проверяем машину, если указана
+    if payload.car_id:
+        car = db.query(Car).filter(Car.id == payload.car_id).first()
+        if not car or car.user_id != current_user.id:
+            raise HTTPException(status_code=400, detail="Машина не найдена в вашем гараже")
+
+    participant = (
+        db.query(EventParticipant)
+        .filter(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == current_user.id,
+        )
+        .first()
     )
-    return ReferralInfo(code=current_user.referral_code, referrals_count=referrals_count)
 
+    if participant and participant.status in ("going", "maybe"):
+        participant.status = payload.status
+        participant.car_id = payload.car_id
+        db.commit()
+        return {
+            "message": "Статус участия обновлён",
+            "status": participant.status,
+            "participants_count": event.participants_count,
+        }
 
-@router.get("/{user_id}", response_model=UserPublic, summary="Профиль пользователя")
-def get_user(user_id: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-    return user
+    if event.max_participants and event.participants_count >= event.max_participants:
+        raise HTTPException(status_code=400, detail="Достигнут лимит участников")
 
+    if participant:  # ранее вышел — возвращаем
+        participant.status = payload.status
+        participant.car_id = payload.car_id
+        participant.joined_at = utcnow()
+    else:
+        db.add(
+            EventParticipant(
+                event_id=event_id,
+                user_id=current_user.id,
+                car_id=payload.car_id,
+                status=payload.status,
+            )
+        )
 
-@router.get(
-    "/{user_id}/cars",
-    response_model=List[CarOut],
-    summary="Гараж пользователя",
-)
-def get_user_cars(user_id: str, db: Session = Depends(get_db)):
-    if not db.query(User.id).filter(User.id == user_id).first():
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    event.participants_count = (event.participants_count or 0) + 1
+    current_user.events_attended = (current_user.events_attended or 0) + 1
 
-    return (
-        db.query(Car)
-        .filter(Car.user_id == user_id)
-        .order_by(Car.is_primary.desc(), Car.created_at.desc())
-        .all()
-    )
+    # Добавляем в чат сходки
+    room = get_or_create_event_room(db, event)
+    add_room_member(db, room.id, current_user.id)
+    post_system_message(db, room.id, f"{current_user.username} присоединился к сходке", current_user.id)
 
+    db.commit()
+    db.refresh(event)
 
-@router.get(
-    "/{user_id}/clubs",
-    summary="Клубы пользователя и его роль в каждом",
-)
-def get_user_clubs(user_id: str, db: Session = Depends(get_db)):
-    if not db.query(User.id).filter(User.id == user_id).first():
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-    memberships = (
-        db.query(ClubMember)
-        .filter(ClubMember.user_id == user_id, ClubMember.status == "approved")
-        .all()
-    )
-    if not memberships:
-        return []
-
-    clubs = {
-        c.id: c
-        for c in db.query(Club).filter(Club.id.in_([m.club_id for m in memberships])).all()
+    return {
+        "message": "Вы записаны на сходку",
+        "status": payload.status,
+        "participants_count": event.participants_count,
+        "chat_room_id": room.id,
     }
 
-    result = []
-    for m in memberships:
-        club = clubs.get(m.club_id)
-        if not club:
-            continue
-        result.append(
-            {
-                "club_id": club.id,
-                "name": club.name,
-                "logo_url": club.logo_url,
-                "role": m.role,
-            }
-        )
-    return result
 
-
-@router.get(
-    "/{user_id}/events",
-    response_model=List[EventOut],
-    summary="События, созданные пользователем",
-)
-def get_user_events(
-    user_id: str,
-    page: Pagination = Depends(),
+@router.post("/{event_id}/leave", summary="Не пойду на сходку")
+def leave_event(
+    event_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    return (
-        db.query(Event)
-        .filter(Event.creator_id == user_id, Event.is_active.is_(True))
-        .order_by(Event.event_date.desc())
-        .offset(page.offset)
-        .limit(page.limit)
-        .all()
-    )
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
 
-
-@router.get(
-    "/{user_id}/attending",
-    response_model=List[EventOut],
-    summary="События, куда пользователь идёт",
-)
-def get_user_attending(
-    user_id: str,
-    page: Pagination = Depends(),
-    db: Session = Depends(get_db),
-):
-    event_ids = [
-        row[0]
-        for row in db.query(EventParticipant.event_id)
+    participant = (
+        db.query(EventParticipant)
         .filter(
-            EventParticipant.user_id == user_id,
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not participant or participant.status == "left":
+        raise HTTPException(status_code=400, detail="Вы не участвуете в этом событии")
+
+    participant.status = "left"
+    event.participants_count = max(0, (event.participants_count or 1) - 1)
+    current_user.events_attended = max(0, (current_user.events_attended or 1) - 1)
+
+    room = db.query(ChatRoom).filter(ChatRoom.event_id == event_id).first()
+    if room and event.creator_id != current_user.id:
+        remove_room_member(db, room.id, current_user.id)
+
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "message": "Вы больше не участвуете",
+        "participants_count": event.participants_count,
+    }
+
+
+@router.get(
+    "/{event_id}/participants",
+    response_model=List[ParticipantOut],
+    summary="Участники сходки",
+)
+def list_participants(
+    event_id: str,
+    page: Pagination = Depends(),
+    db: Session = Depends(get_db),
+):
+    if not db.query(Event.id).filter(Event.id == event_id).first():
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+
+    participants = (
+        db.query(EventParticipant)
+        .filter(
+            EventParticipant.event_id == event_id,
             EventParticipant.status.in_(("going", "maybe")),
         )
-        .all()
-    ]
-    if not event_ids:
-        return []
-
-    return (
-        db.query(Event)
-        .filter(Event.id.in_(event_ids), Event.is_active.is_(True))
-        .order_by(Event.event_date.desc())
+        .order_by(EventParticipant.joined_at.asc())
         .offset(page.offset)
         .limit(page.limit)
         .all()
     )
+
+    user_map = users_by_ids(db, [p.user_id for p in participants])
+
+    result = []
+    for p in participants:
+        item = ParticipantOut.model_validate(p)
+        user = user_map.get(p.user_id)
+        if user:
+            item.user = UserPublic.model_validate(user)
+        result.append(item)
+    return result
