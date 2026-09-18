@@ -18,7 +18,7 @@ from app.models.user import ProfileView, User, UserLike
 from app.schemas.car import CarOut
 from app.schemas.event import EventOut
 from app.schemas.user import ProfileViewOut, ReferralInfo, UserMe, UserPublic, UserUpdate
-from app.services import extend_premium
+from app.services import extend_premium, notify
 
 router = APIRouter()
 
@@ -250,6 +250,15 @@ def toggle_user_like(
         db.add(UserLike(target_user_id=user_id, liker_user_id=current_user.id))
         target.likes_count = (target.likes_count or 0) + 1
         liked = True
+        notify(
+            db,
+            user_id=user_id,
+            type="profile_like",
+            actor_id=current_user.id,
+            target_type="user",
+            target_id=user_id,
+            message=f"{current_user.username} лайкнул(а) твой профиль",
+        )
 
     db.commit()
     db.refresh(target)
