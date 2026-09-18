@@ -49,6 +49,7 @@ class UserPublic(BaseModel):
     city: Optional[str] = None
     instagram: Optional[str] = None
     is_verified: bool = False
+    is_admin: bool = False
     is_premium: bool = False
     is_online: bool = False
     average_rating: float = 0.0
