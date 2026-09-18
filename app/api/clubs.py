@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
-from app.models.chat import ChatRoom
+from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
 from app.models.event import Event
 from app.models.user import User
@@ -218,6 +218,37 @@ def update_club(
     return club
 
 
+@router.delete("/{club_id}", summary="Удалить клуб")
+def delete_club(
+    club_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    club = _get_club_or_404(db, club_id)
+
+    if club.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только владелец может удалить клуб")
+
+    # Чат клуба целиком (сообщения → участники → комната)
+    room = db.query(ChatRoom).filter(ChatRoom.club_id == club_id).first()
+    if room:
+        db.query(ChatMessage).filter(ChatMessage.room_id == room.id).delete(synchronize_session=False)
+        db.query(ChatMember).filter(ChatMember.room_id == room.id).delete(synchronize_session=False)
+        db.delete(room)
+
+    # Membership'ы клуба
+    db.query(ClubMember).filter(ClubMember.club_id == club_id).delete(synchronize_session=False)
+
+    # События клуба остаются, но перестают быть клубными
+    db.query(Event).filter(Event.club_id == club_id).update(
+        {Event.club_id: None}, synchronize_session=False
+    )
+
+    db.delete(club)
+    db.commit()
+    return {"message": "Клуб удалён", "club_id": club_id}
+
+
 @router.post("/{club_id}/join", summary="Вступить в клуб")
 def join_club(
     club_id: str,
@@ -416,12 +447,22 @@ def club_events(
     club_id: str,
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     _get_club_or_404(db, club_id)
+
+    query = db.query(Event).filter(Event.club_id == club_id, Event.is_active.is_(True))
+
+    is_member = False
+    if current_user:
+        membership = _get_membership(db, club_id, current_user.id)
+        is_member = bool(membership and membership.status == "approved")
+
+    if not is_member:
+        query = query.filter(Event.is_private.is_(False))
+
     return (
-        db.query(Event)
-        .filter(Event.club_id == club_id, Event.is_active.is_(True))
-        .order_by(Event.event_date.desc())
+        query.order_by(Event.event_date.desc())
         .offset(page.offset)
         .limit(page.limit)
         .all()
