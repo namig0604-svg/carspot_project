@@ -27,6 +27,7 @@ from app.security import (
     token_expires_in_seconds,
     verify_password,
 )
+from app.services import grant_referral_premium_if_earned
 
 router = APIRouter()
 
@@ -103,6 +104,11 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
             user.referred_by_id = referrer.id
 
     db.add(user)
+    db.flush()  # чтобы новый пользователь уже учитывался в подсчёте рефералов ниже
+
+    # Если пригласивший как раз набрал ещё 10 приглашённых — начисляем ему Premium.
+    grant_referral_premium_if_earned(db, user.referred_by_id)
+
     db.commit()
     db.refresh(user)
 
