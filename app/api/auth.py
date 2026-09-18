@@ -1,6 +1,10 @@
 """
 Регистрация и авторизация.
 """
+import random
+import re
+import string
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
@@ -42,6 +46,16 @@ def _find_user(db: Session, login: str) -> User | None:
     )
 
 
+def _generate_referral_code(db: Session, username: str) -> str:
+    """Генерирует уникальный реферальный код на основе логина."""
+    base = re.sub(r"[^A-Za-z0-9]", "", username).upper()[:10] or "USER"
+    code = base
+    while db.query(User).filter(User.referral_code == code).first():
+        suffix = "".join(random.choices(string.digits, k=4))
+        code = f"{base}{suffix}"[:20]
+    return code
+
+
 def _build_token(user: User) -> Token:
     return Token(
         access_token=create_access_token(user.id),
@@ -76,6 +90,18 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         country=payload.country,
         city=payload.city,
     )
+
+    # --- Реферальная программа ---
+    user.referral_code = _generate_referral_code(db, username)
+    if payload.referral_code:
+        referrer = (
+            db.query(User)
+            .filter(func.upper(User.referral_code) == payload.referral_code.strip().upper())
+            .first()
+        )
+        if referrer and referrer.id != user.id:
+            user.referred_by_id = referrer.id
+
     db.add(user)
     db.commit()
     db.refresh(user)
