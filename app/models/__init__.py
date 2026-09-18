@@ -7,6 +7,7 @@ from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
+from app.models.friendship import Friendship
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
 from app.models.report import Report
@@ -22,6 +23,7 @@ __all__ = [
     "ChatRoom",
     "ChatMember",
     "ChatMessage",
+    "Friendship",
     "Photo",
     "PhotoLike",
     "EventRating",
