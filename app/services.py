@@ -13,6 +13,7 @@ from app.models.base import utcnow
 from app.models.business import Business, BusinessReview
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.event import Event
+from app.models.notification import Notification
 from app.models.rating import EventRating, UserRating
 from app.models.user import User
 
@@ -244,6 +245,41 @@ def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) ->
     if new_milestones > 0:
         extend_premium(referrer, settings.PREMIUM_MONTH_DAYS * new_milestones)
         referrer.referral_premium_claimed_count = milestones_earned
+
+
+# ─────────────────────────── УВЕДОМЛЕНИЯ ───────────────────────────
+
+def notify(
+    db: Session,
+    *,
+    user_id: str,
+    type: str,
+    message: str,
+    actor_id: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+) -> Optional[Notification]:
+    """
+    Кладёт запись в ленту уведомлений. Не уведомляем человека о его же
+    действии (actor_id == user_id) — незачем говорить самому себе, что ты
+    сам что-то лайкнул. Ошибки здесь не должны ронять основной запрос —
+    уведомление вторично по отношению к самому действию.
+    """
+    if actor_id and actor_id == user_id:
+        return None
+    try:
+        n = Notification(
+            user_id=user_id,
+            type=type,
+            actor_id=actor_id,
+            target_type=target_type,
+            target_id=target_id,
+            message=message,
+        )
+        db.add(n)
+        return n
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # ─────────────────────── ХЕЛПЕРЫ ОТВЕТОВ ───────────────────────
