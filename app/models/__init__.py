@@ -9,6 +9,7 @@ from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
+from app.models.report import Report
 from app.models.user import User
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "Business",
     "BusinessReview",
     "BusinessFavorite",
+    "Report",
 ]
