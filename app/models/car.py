@@ -1,4 +1,13 @@
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from app.database import Base
 from app.models.base import new_id, utcnow
@@ -48,3 +57,17 @@ class Car(Base):
 
 
 Index("ix_cars_user_primary", Car.user_id, Car.is_primary)
+
+
+class CarLike(Base):
+    """Лайк машины — один пользователь может лайкнуть машину один раз."""
+
+    __tablename__ = "car_likes"
+    __table_args__ = (
+        UniqueConstraint("car_id", "user_id", name="uq_car_like"),
+    )
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    car_id = Column(String(36), index=True, nullable=False)
+    user_id = Column(String(36), index=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
