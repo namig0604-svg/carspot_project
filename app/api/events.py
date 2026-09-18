@@ -33,6 +33,7 @@ from app.services import (
     add_room_member,
     expire_ended_events,
     get_or_create_event_room,
+    notify,
     post_system_message,
     remove_room_member,
     users_by_ids,
@@ -487,6 +488,16 @@ def join_event(
     room = get_or_create_event_room(db, event)
     add_room_member(db, room.id, current_user.id)
     post_system_message(db, room.id, f"{current_user.username} присоединился к сходке", current_user.id)
+
+    notify(
+        db,
+        user_id=event.creator_id,
+        type="event_join",
+        actor_id=current_user.id,
+        target_type="event",
+        target_id=event.id,
+        message=f"{current_user.username} присоединился к твоей сходке «{event.title}»",
+    )
 
     db.commit()
     db.refresh(event)
