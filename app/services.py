@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.base import utcnow
+from app.models.business import Business, BusinessReview
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.event import Event
 from app.models.rating import EventRating, UserRating
@@ -192,6 +193,19 @@ def recalc_user_rating(db: Session, user_id: str) -> None:
     if user:
         user.average_rating = round(float(avg or 0), 2)
         user.ratings_count = int(count or 0)
+
+
+def recalc_business_rating(db: Session, business_id: str) -> None:
+    """Пересчитывает средний рейтинг автосервиса/ателье по его отзывам."""
+    avg, count = (
+        db.query(func.avg(BusinessReview.rating), func.count(BusinessReview.id))
+        .filter(BusinessReview.business_id == business_id)
+        .one()
+    )
+    business = db.query(Business).filter(Business.id == business_id).first()
+    if business:
+        business.average_rating = round(float(avg or 0), 2)
+        business.reviews_count = int(count or 0)
 
 
 # ─────────────────────── ХЕЛПЕРЫ ОТВЕТОВ ───────────────────────
