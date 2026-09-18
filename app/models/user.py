@@ -1,6 +1,15 @@
 from datetime import timedelta
 
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 from app.database import Base
 from app.models.base import new_id, utcnow
@@ -40,6 +49,7 @@ class User(Base):
     events_created = Column(Integer, default=0, nullable=False)
     events_attended = Column(Integer, default=0, nullable=False)
     cars_count = Column(Integer, default=0, nullable=False)
+    likes_count = Column(Integer, default=0, nullable=False)
 
     # --- Реферальная программа ---
     referral_code = Column(String(20), unique=True, index=True, nullable=True)
@@ -55,3 +65,17 @@ class User(Base):
         if not self.last_seen_at:
             return False
         return (utcnow() - self.last_seen_at) <= timedelta(minutes=ONLINE_THRESHOLD_MINUTES)
+
+
+class UserLike(Base):
+    """Лайк профиля — один пользователь может лайкнуть другого один раз."""
+
+    __tablename__ = "user_likes"
+    __table_args__ = (
+        UniqueConstraint("target_user_id", "liker_user_id", name="uq_user_like"),
+    )
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    target_user_id = Column(String(36), index=True, nullable=False)
+    liker_user_id = Column(String(36), index=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
