@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.base import utcnow
 from app.models.business import Business, BusinessReview
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
@@ -206,6 +207,36 @@ def recalc_business_rating(db: Session, business_id: str) -> None:
     if business:
         business.average_rating = round(float(avg or 0), 2)
         business.reviews_count = int(count or 0)
+
+
+# ─────────────────────── CARSPOT PREMIUM ───────────────────────
+
+def extend_premium(user: User, days: int) -> None:
+    """Продлевает Premium на `days` от текущего срока (или от сейчас, если уже истёк)."""
+    base = user.premium_until if user.premium_until and user.premium_until > utcnow() else utcnow()
+    user.premium_until = base + timedelta(days=days)
+
+
+def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) -> None:
+    """
+    Каждые settings.REFERRALS_PER_PREMIUM_MONTH приглашённых друзей дают
+    settings.PREMIUM_MONTH_DAYS дней Premium. referral_premium_claimed_count
+    хранит, сколько таких «порций» уже начислено, чтобы не начислять повторно
+    при каждом пересчёте — начисляется только разница новых порций.
+    Вызывается сразу после регистрации нового пользователя по реферальному коду.
+    """
+    if not referrer_id:
+        return
+    referrer = db.query(User).filter(User.id == referrer_id).first()
+    if not referrer:
+        return
+
+    referrals_count = db.query(User).filter(User.referred_by_id == referrer_id).count()
+    milestones_earned = referrals_count // settings.REFERRALS_PER_PREMIUM_MONTH
+    new_milestones = milestones_earned - (referrer.referral_premium_claimed_count or 0)
+    if new_milestones > 0:
+        extend_premium(referrer, settings.PREMIUM_MONTH_DAYS * new_milestones)
+        referrer.referral_premium_claimed_count = milestones_earned
 
 
 # ─────────────────────── ХЕЛПЕРЫ ОТВЕТОВ ───────────────────────
