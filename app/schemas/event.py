@@ -102,6 +102,7 @@ class EventOut(BaseModel):
     average_rating: float
     ratings_count: int
     views_count: int
+    boosted_until: Optional[datetime] = None
 
     is_active: bool
     is_cancelled: bool
