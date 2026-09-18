@@ -39,10 +39,14 @@ class RoomOut(BaseModel):
     messages_count: int = 0
     created_at: datetime
 
+    # Заполняются отдельно в списке чатов (my_rooms) — не хранятся в таблице.
+    unread_count: int = 0
+    members_count: int = 0
+    other_online_count: int = 0
+
 
 class RoomDetail(RoomOut):
     members: List[UserPublic] = []
-    unread_count: int = 0
 
 
 class DirectChatCreate(BaseModel):
@@ -55,3 +59,7 @@ class MessageListResponse(BaseModel):
     limit: int
     offset: int
     items: List[MessageOut]
+
+
+class ChatImageUploadOut(BaseModel):
+    image_url: str
