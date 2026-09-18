@@ -75,3 +75,20 @@ class ClubListResponse(BaseModel):
     limit: int
     offset: int
     items: List[ClubOut]
+
+
+class ClubLeaderboardOut(BaseModel):
+    """Строка рейтинга клубов: активность (события, участники, оценки)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    logo_url: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    is_verified: bool = False
+    members_count: int = 0
+    events_count: int = 0
+    average_rating: float = 0.0
+    score: int = 0
