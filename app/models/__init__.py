@@ -2,6 +2,7 @@
 Все модели собраны здесь, чтобы Base.metadata знал обо всех таблицах
 перед вызовом create_all().
 """
+from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.car import Car
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
@@ -25,4 +26,7 @@ __all__ = [
     "EventRating",
     "UserRating",
     "SpotRating",
+    "Business",
+    "BusinessReview",
+    "BusinessFavorite",
 ]
