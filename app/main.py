@@ -26,6 +26,7 @@ API для поиска и организации автомобильных с�
 * **Мой Гараж** — автомобили с полными характеристиками
 * **Сходки** — создание, карта, поиск рядом, участники
 * **Клубы** — создание, вступление, роли, события клуба
+* **Автосервисы и ателье** — каталог, карта рядом, отзывы, избранное
 * **Чаты** — личные, чаты сходок и клубов + WebSocket
 * **Рейтинги** — оценки сходок, пользователей и спотов
 * **Фото** — загрузка к сходкам и машинам, лайки
@@ -107,13 +108,14 @@ def health():
 
 # ─────────────────────────── РОУТЕРЫ ───────────────────────────
 
-from app.api import auth, cars, chats, clubs, events, photos, ratings, users  # noqa: E402
+from app.api import auth, businesses, cars, chats, clubs, events, photos, ratings, users  # noqa: E402
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
 app.include_router(users.router, prefix="/api/users", tags=["Пользователи"])
 app.include_router(cars.router, prefix="/api/cars", tags=["Мой Гараж"])
 app.include_router(events.router, prefix="/api/events", tags=["Сходки"])
 app.include_router(clubs.router, prefix="/api/clubs", tags=["Клубы"])
+app.include_router(businesses.router, prefix="/api/businesses", tags=["Автосервисы"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
