@@ -14,7 +14,7 @@ from app.models.friendship import Friendship
 from app.models.user import User
 from app.schemas.friend import FriendRequestOut, FriendStatusOut
 from app.schemas.user import UserPublic
-from app.services import pair_key_for, users_by_ids
+from app.services import notify, pair_key_for, users_by_ids
 
 router = APIRouter()
 
@@ -167,6 +167,15 @@ def send_friend_request(
             # Встречная заявка от того, кто уже написал нам — сразу дружим.
             existing.status = "accepted"
             existing.updated_at = utcnow()
+            notify(
+                db,
+                user_id=existing.requester_id,
+                type="friend_accepted",
+                actor_id=current_user.id,
+                target_type="friendship",
+                target_id=existing.id,
+                message=f"{current_user.username} принял(а) твою заявку в друзья",
+            )
             db.commit()
             return FriendStatusOut(status="friends", friendship_id=existing.id)
 
@@ -185,6 +194,16 @@ def send_friend_request(
         status="pending",
     )
     db.add(fr)
+    db.flush()
+    notify(
+        db,
+        user_id=user_id,
+        type="friend_request",
+        actor_id=current_user.id,
+        target_type="friendship",
+        target_id=fr.id,
+        message=f"{current_user.username} хочет добавить тебя в друзья",
+    )
     db.commit()
     db.refresh(fr)
     return FriendStatusOut(status="pending_sent", friendship_id=fr.id)
@@ -208,6 +227,15 @@ def accept_friend_request(
 
     fr.status = "accepted"
     fr.updated_at = utcnow()
+    notify(
+        db,
+        user_id=fr.requester_id,
+        type="friend_accepted",
+        actor_id=current_user.id,
+        target_type="friendship",
+        target_id=fr.id,
+        message=f"{current_user.username} принял(а) твою заявку в друзья",
+    )
     db.commit()
     return FriendStatusOut(status="friends", friendship_id=fr.id)
 
