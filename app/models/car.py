@@ -32,6 +32,7 @@ class Car(Base):
 
     # --- Внешний вид и тюнинг ---
     color = Column(String(50), nullable=True)
+    license_plate = Column(String(20), nullable=True)  # госномер
     mods = Column(Text, nullable=True)                 # список доработок текстом
     description = Column(Text, nullable=True)
     photo_url = Column(String(500), nullable=True)     # главное фото
