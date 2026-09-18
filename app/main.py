@@ -28,6 +28,7 @@ API для поиска и организации автомобильных с�
 * **Клубы** — создание, вступление, роли, события клуба
 * **Автосервисы и ателье** — каталог, карта рядом, отзывы, избранное
 * **Чаты** — личные, чаты сходок и клубов + WebSocket
+* **Друзья** — заявки в друзья, список друзей
 * **Рейтинги** — оценки сходок, пользователей и спотов
 * **Фото** — загрузка к сходкам и машинам, лайки
 * **Жалобы и модерация** — жалобы на пользователей/контент, блокировка (для админов)
@@ -117,6 +118,7 @@ from app.api import (  # noqa: E402
     chats,
     clubs,
     events,
+    friends,
     photos,
     ratings,
     reports,
@@ -130,6 +132,7 @@ app.include_router(events.router, prefix="/api/events", tags=["Сходки"])
 app.include_router(clubs.router, prefix="/api/clubs", tags=["Клубы"])
 app.include_router(businesses.router, prefix="/api/businesses", tags=["Автосервисы"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
+app.include_router(friends.router, prefix="/api/friends", tags=["Друзья"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Жалобы"])
