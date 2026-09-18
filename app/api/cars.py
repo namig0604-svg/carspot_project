@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.car import Car, CarLike
 from app.models.user import User
 from app.schemas.car import CarCreate, CarOut, CarUpdate, GarageOut
+from app.schemas.user import UserPublic
 from app.deps import get_current_active_user, get_optional_user
 
 router = APIRouter()
@@ -62,12 +63,13 @@ def create_car(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
+    max_cars = settings.PREMIUM_MAX_CARS_PER_USER if current_user.is_premium else settings.MAX_CARS_PER_USER
     existing_count = db.query(Car).filter(Car.user_id == current_user.id).count()
-    if existing_count >= settings.MAX_CARS_PER_USER:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Максимум {settings.MAX_CARS_PER_USER} машин в гараже",
-        )
+    if existing_count >= max_cars:
+        detail = f"Максимум {max_cars} машин в гараже"
+        if not current_user.is_premium:
+            detail += f". С CarSpot Premium — до {settings.PREMIUM_MAX_CARS_PER_USER}"
+        raise HTTPException(status_code=400, detail=detail)
 
     car = Car(user_id=current_user.id, **payload.model_dump())
 
@@ -138,6 +140,42 @@ def toggle_car_like(
     db.commit()
     db.refresh(car)
     return {"liked": liked, "likes_count": car.likes_count}
+
+
+@router.get(
+    "/{car_id}/likers",
+    response_model=List[UserPublic],
+    summary="Кто лайкнул машину (Premium)",
+)
+def car_likers(
+    car_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    car = db.query(Car).filter(Car.id == car_id).first()
+    if not car:
+        raise HTTPException(status_code=404, detail="Машина не найдена")
+    if car.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Это не ваша машина")
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Список тех, кто лайкнул машину, доступен только с CarSpot Premium",
+        )
+
+    liker_ids = [
+        row[0]
+        for row in db.query(CarLike.user_id)
+        .filter(CarLike.car_id == car_id)
+        .order_by(CarLike.created_at.desc())
+        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .all()
+    ]
+    if not liker_ids:
+        return []
+
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(liker_ids)).all()}
+    return [UserPublic.model_validate(users_by_id[uid]) for uid in liker_ids if uid in users_by_id]
 
 
 @router.patch("/{car_id}", response_model=CarOut, summary="Изменить машину")
