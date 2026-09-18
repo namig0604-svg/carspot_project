@@ -83,6 +83,7 @@ def _ensure_columns() -> None:
     additions = [
         ("users", "referral_code", "VARCHAR(20)"),
         ("users", "referred_by_id", "VARCHAR(36)"),
+        ("users", "ban_reason", "TEXT"),
         ("cars", "license_plate", "VARCHAR(20)"),
     ]
     try:
