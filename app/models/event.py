@@ -69,6 +69,9 @@ class Event(Base):
     ratings_count = Column(Integer, default=0, nullable=False)
     views_count = Column(Integer, default=0, nullable=False)
 
+    # --- CarSpot Premium ---
+    boosted_until = Column(DateTime, nullable=True)  # буст поднимает сходку в топ ленты
+
     # --- Статусы ---
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     is_cancelled = Column(Boolean, default=False, nullable=False)
