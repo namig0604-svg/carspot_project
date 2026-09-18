@@ -1,17 +1,17 @@
 """
 Мой Гараж — автомобили пользователя.
 """
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.car import Car
+from app.models.car import Car, CarLike
 from app.models.user import User
 from app.schemas.car import CarCreate, CarOut, CarUpdate, GarageOut
-from app.deps import get_current_active_user
+from app.deps import get_current_active_user, get_optional_user
 
 router = APIRouter()
 
@@ -88,11 +88,56 @@ def create_car(
 
 
 @router.get("/{car_id}", response_model=CarOut, summary="Карточка машины")
-def get_car(car_id: str, db: Session = Depends(get_db)):
+def get_car(
+    car_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     car = db.query(Car).filter(Car.id == car_id).first()
     if not car:
         raise HTTPException(status_code=404, detail="Машина не найдена")
-    return car
+
+    out = CarOut.model_validate(car)
+    if current_user:
+        out.is_liked = (
+            db.query(CarLike.id)
+            .filter(CarLike.car_id == car_id, CarLike.user_id == current_user.id)
+            .first()
+            is not None
+        )
+    return out
+
+
+@router.post("/{car_id}/like", summary="Лайк / снять лайк с машины")
+def toggle_car_like(
+    car_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    car = db.query(Car).filter(Car.id == car_id).first()
+    if not car:
+        raise HTTPException(status_code=404, detail="Машина не найдена")
+    if car.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя лайкнуть свою машину")
+
+    existing = (
+        db.query(CarLike)
+        .filter(CarLike.car_id == car_id, CarLike.user_id == current_user.id)
+        .first()
+    )
+
+    if existing:
+        db.delete(existing)
+        car.likes_count = max(0, (car.likes_count or 1) - 1)
+        liked = False
+    else:
+        db.add(CarLike(car_id=car_id, user_id=current_user.id))
+        car.likes_count = (car.likes_count or 0) + 1
+        liked = True
+
+    db.commit()
+    db.refresh(car)
+    return {"liked": liked, "likes_count": car.likes_count}
 
 
 @router.patch("/{car_id}", response_model=CarOut, summary="Изменить машину")
