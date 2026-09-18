@@ -11,6 +11,7 @@ class UserRegister(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100, examples=["Namig Nabiev"])
     country: Optional[str] = Field(None, max_length=50, examples=["Georgia"])
     city: Optional[str] = Field(None, max_length=100, examples=["Tbilisi"])
+    referral_code: Optional[str] = Field(None, max_length=20, examples=["NAMIG1234"])
 
 
 class UserLogin(BaseModel):
@@ -65,6 +66,7 @@ class UserMe(UserPublic):
     phone: Optional[str] = None
     is_active: bool = True
     is_admin: bool = False
+    referral_code: Optional[str] = None
 
 
 class Token(BaseModel):
@@ -72,3 +74,10 @@ class Token(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserMe
+
+
+class ReferralInfo(BaseModel):
+    """Свой реферальный код и число приглашённых."""
+
+    code: Optional[str] = None
+    referrals_count: int = 0
