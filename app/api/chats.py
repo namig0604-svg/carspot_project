@@ -2,25 +2,31 @@
 Чаты: личные, чаты сходок и клубов.
 REST — история и отправка, WebSocket — реальное время.
 """
+import os
+import uuid
 from typing import List, Optional
 
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
     Query,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal, get_db
 from app.deps import Pagination, get_current_active_user
 from app.models.base import utcnow
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.user import User
 from app.schemas.chat import (
+    ChatImageUploadOut,
     DirectChatCreate,
     MessageCreate,
     MessageListResponse,
@@ -40,6 +46,9 @@ from app.ws_manager import manager
 
 router = APIRouter()
 
+UPLOAD_DIR = settings.UPLOAD_DIR
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 def _get_room_or_404(db: Session, room_id: str) -> ChatRoom:
     room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
@@ -53,26 +62,92 @@ def _require_member(db: Session, room_id: str, user_id: str) -> None:
         raise HTTPException(status_code=403, detail="Вы не участник этого чата")
 
 
+def _save_chat_image(contents: bytes, filename: str) -> str:
+    """Сохраняет картинку чата и возвращает публичный URL. Как в photos.py —
+    на Railway диск эфемерный, для продакшена стоит подключить S3/Cloudinary."""
+    extension = (filename.rsplit(".", 1)[-1] if "." in filename else "jpg").lower()
+    if extension not in ("jpg", "jpeg", "png", "webp", "heic"):
+        extension = "jpg"
+    key = f"{uuid.uuid4().hex}.{extension}"
+    path = os.path.join(UPLOAD_DIR, key)
+    with open(path, "wb") as f:
+        f.write(contents)
+    return f"/uploads/{key}"
+
+
 @router.get("/", response_model=List[RoomOut], summary="Мои чаты")
 def my_rooms(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    room_ids = [
-        row[0]
-        for row in db.query(ChatMember.room_id)
+    my_memberships = (
+        db.query(ChatMember)
         .filter(ChatMember.user_id == current_user.id)
         .all()
-    ]
-    if not room_ids:
+    )
+    if not my_memberships:
         return []
 
-    return (
+    my_membership_by_room = {m.room_id: m for m in my_memberships}
+    room_ids = list(my_membership_by_room.keys())
+
+    rooms = (
         db.query(ChatRoom)
         .filter(ChatRoom.id.in_(room_ids), ChatRoom.is_active.is_(True))
         .order_by(ChatRoom.last_message_at.desc())
         .all()
     )
+    if not rooms:
+        return []
+
+    # Все участники всех этих чатов — одним запросом, чтобы не дёргать БД в цикле.
+    all_members = (
+        db.query(ChatMember)
+        .filter(ChatMember.room_id.in_([r.id for r in rooms]))
+        .all()
+    )
+    members_by_room: dict = {}
+    for m in all_members:
+        members_by_room.setdefault(m.room_id, []).append(m)
+
+    other_user_ids = {
+        m.user_id for m in all_members if m.user_id != current_user.id
+    }
+    online_ids = set()
+    if other_user_ids:
+        online_ids = {
+            u.id
+            for u in db.query(User).filter(User.id.in_(other_user_ids)).all()
+            if u.is_online
+        }
+
+    items = []
+    for room in rooms:
+        room_members = members_by_room.get(room.id, [])
+        my_member = my_membership_by_room.get(room.id)
+
+        unread = 0
+        if my_member:
+            unread_query = db.query(ChatMessage).filter(
+                ChatMessage.room_id == room.id,
+                ChatMessage.is_deleted.is_(False),
+                ChatMessage.user_id != current_user.id,
+            )
+            if my_member.last_read_at:
+                unread_query = unread_query.filter(ChatMessage.created_at > my_member.last_read_at)
+            unread = unread_query.count()
+
+        other_online = sum(
+            1 for m in room_members if m.user_id != current_user.id and m.user_id in online_ids
+        )
+
+        item = RoomOut.model_validate(room)
+        item.unread_count = unread
+        item.members_count = len(room_members)
+        item.other_online_count = other_online
+        items.append(item)
+
+    return items
 
 
 @router.post("/direct", response_model=RoomOut, summary="Открыть личный чат")
@@ -118,13 +193,22 @@ def get_room(
                 ChatMessage.room_id == room_id,
                 ChatMessage.created_at > me.last_read_at,
                 ChatMessage.user_id != current_user.id,
+                ChatMessage.is_deleted.is_(False),
             )
             .count()
         )
 
+    other_online = sum(
+        1
+        for m in member_rows
+        if m.user_id != current_user.id and user_map.get(m.user_id) and user_map[m.user_id].is_online
+    )
+
     detail = RoomDetail.model_validate(room)
     detail.members = [UserPublic.model_validate(u) for u in user_map.values()]
     detail.unread_count = unread
+    detail.members_count = len(member_rows)
+    detail.other_online_count = other_online
     return detail
 
 
@@ -220,6 +304,37 @@ async def send_message(
     await manager.broadcast(room_id, {"type": "message", "data": out.model_dump(mode="json")})
 
     return out
+
+
+@router.post(
+    "/{room_id}/upload-image",
+    response_model=ChatImageUploadOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Загрузить фото для сообщения в чат",
+)
+async def upload_chat_image(
+    room_id: str,
+    file: UploadFile = File(..., description="Изображение"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    _get_room_or_404(db, room_id)
+    _require_member(db, room_id, current_user.id)
+
+    if file.content_type and file.content_type not in settings.ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат: {file.content_type}")
+
+    contents = await file.read()
+    if len(contents) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой. Максимум {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} МБ",
+        )
+    if not contents:
+        raise HTTPException(status_code=400, detail="Файл пустой")
+
+    image_url = _save_chat_image(contents, file.filename or "photo.jpg")
+    return ChatImageUploadOut(image_url=image_url)
 
 
 @router.delete("/{room_id}/messages/{message_id}", summary="Удалить своё сообщение")
