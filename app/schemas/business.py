@@ -85,6 +85,7 @@ class BusinessOut(BaseModel):
     average_rating: float
     reviews_count: int
     views_count: int
+    boosted_until: Optional[datetime] = None
     created_at: datetime
 
     is_favorite: bool = False
