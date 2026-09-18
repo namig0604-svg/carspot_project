@@ -7,15 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
+from app.models.base import utcnow
 from app.models.car import Car
 from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
-from app.models.user import User, UserLike
+from app.models.user import ProfileView, User, UserLike
 from app.schemas.car import CarOut
 from app.schemas.event import EventOut
-from app.schemas.user import ReferralInfo, UserMe, UserPublic, UserUpdate
+from app.schemas.user import ProfileViewOut, ReferralInfo, UserMe, UserPublic, UserUpdate
+from app.services import extend_premium
 
 router = APIRouter()
 
@@ -83,7 +86,119 @@ def get_my_referral(
     referrals_count = (
         db.query(User).filter(User.referred_by_id == current_user.id).count()
     )
-    return ReferralInfo(code=current_user.referral_code, referrals_count=referrals_count)
+    per_month = settings.REFERRALS_PER_PREMIUM_MONTH
+    return ReferralInfo(
+        code=current_user.referral_code,
+        referrals_count=referrals_count,
+        referrals_per_premium_month=per_month,
+        referrals_until_next_reward=per_month - (referrals_count % per_month),
+        premium_months_earned=current_user.referral_premium_claimed_count or 0,
+    )
+
+
+@router.post("/me/premium-trial", response_model=UserMe, summary="Активировать пробный Premium (14 дней)")
+def start_premium_trial(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if current_user.premium_trial_used:
+        raise HTTPException(status_code=400, detail="Пробный период уже был использован")
+
+    extend_premium(current_user, settings.PREMIUM_TRIAL_DAYS)
+    current_user.premium_trial_used = True
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+def _record_profile_view(db: Session, viewer: Optional[User], viewed_user: User) -> None:
+    """Отмечает, что viewer зашёл в профиль viewed_user — не чаще одной строки на пару,
+    чтобы список 'кто смотрел профиль' (Premium) не раздувался повторными визитами."""
+    if not viewer or viewer.id == viewed_user.id:
+        return
+
+    existing = (
+        db.query(ProfileView)
+        .filter(ProfileView.viewed_user_id == viewed_user.id, ProfileView.viewer_id == viewer.id)
+        .first()
+    )
+    if existing:
+        existing.updated_at = utcnow()
+    else:
+        db.add(ProfileView(viewed_user_id=viewed_user.id, viewer_id=viewer.id))
+        viewed_user.profile_views_count = (viewed_user.profile_views_count or 0) + 1
+    db.commit()
+
+
+# ВАЖНО: эти /me/... роуты обязаны быть объявлены ДО "/{user_id}" ниже —
+# иначе FastAPI примет "me" за user_id и они никогда не сработают.
+
+
+@router.get(
+    "/me/likers",
+    response_model=List[UserPublic],
+    summary="Кто лайкнул мой профиль (Premium)",
+)
+def my_likers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Список тех, кто лайкнул профиль, доступен только с CarSpot Premium",
+        )
+
+    liker_ids = [
+        row[0]
+        for row in db.query(UserLike.liker_user_id)
+        .filter(UserLike.target_user_id == current_user.id)
+        .order_by(UserLike.created_at.desc())
+        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .all()
+    ]
+    if not liker_ids:
+        return []
+
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(liker_ids)).all()}
+    return [UserPublic.model_validate(users_by_id[uid]) for uid in liker_ids if uid in users_by_id]
+
+
+@router.get(
+    "/me/profile-views",
+    response_model=List[ProfileViewOut],
+    summary="Кто смотрел мой профиль (Premium)",
+)
+def my_profile_views(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not current_user.is_premium and not current_user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Список просмотров профиля доступен только с CarSpot Premium",
+        )
+
+    rows = (
+        db.query(ProfileView)
+        .filter(ProfileView.viewed_user_id == current_user.id)
+        .order_by(ProfileView.updated_at.desc())
+        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .all()
+    )
+    if not rows:
+        return []
+
+    viewer_ids = [r.viewer_id for r in rows]
+    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(viewer_ids)).all()}
+
+    out = []
+    for r in rows:
+        viewer = users_by_id.get(r.viewer_id)
+        if not viewer:
+            continue
+        out.append(ProfileViewOut(user=UserPublic.model_validate(viewer), viewed_at=r.updated_at))
+    return out
 
 
 @router.get("/{user_id}", response_model=UserPublic, summary="Профиль пользователя")
@@ -104,6 +219,7 @@ def get_user(
             .first()
             is not None
         )
+        _record_profile_view(db, current_user, user)
     return out
 
 
