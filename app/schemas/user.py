@@ -69,6 +69,15 @@ class UserMe(UserPublic):
     referral_code: Optional[str] = None
 
 
+class UserAdminOut(UserPublic):
+    """Профиль для админки — с приватными полями, видимыми только модератору."""
+
+    email: EmailStr
+    is_active: bool = True
+    is_admin: bool = False
+    ban_reason: Optional[str] = None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
