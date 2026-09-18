@@ -69,6 +69,9 @@ class UserMe(UserPublic):
     is_active: bool = True
     is_admin: bool = False
     referral_code: Optional[str] = None
+    premium_until: Optional[datetime] = None
+    premium_trial_used: bool = False
+    profile_views_count: int = 0
 
 
 class UserAdminOut(UserPublic):
@@ -88,7 +91,17 @@ class Token(BaseModel):
 
 
 class ReferralInfo(BaseModel):
-    """Свой реферальный код и число приглашённых."""
+    """Свой реферальный код, число приглашённых и прогресс до награды Premium."""
 
     code: Optional[str] = None
     referrals_count: int = 0
+    referrals_per_premium_month: int = 10
+    referrals_until_next_reward: int = 10
+    premium_months_earned: int = 0
+
+
+class ProfileViewOut(BaseModel):
+    """Одна строка списка 'кто смотрел мой профиль' (Premium)."""
+
+    user: UserPublic
+    viewed_at: datetime
