@@ -22,6 +22,7 @@ class CarBase(BaseModel):
     zero_to_hundred: Optional[str] = Field(None, max_length=20, examples=["4.5"])
 
     color: Optional[str] = Field(None, max_length=50, examples=["Midnight Purple"])
+    license_plate: Optional[str] = Field(None, max_length=20, examples=["AA-123-BB"])
     mods: Optional[str] = Field(None, examples=["Garrett GT2871R, HKS coilovers, Work Meister S1"])
     description: Optional[str] = None
     photo_url: Optional[str] = Field(None, max_length=500)
@@ -49,6 +50,7 @@ class CarUpdate(BaseModel):
     weight_kg: Optional[int] = Field(None, ge=0, le=20000)
     zero_to_hundred: Optional[str] = Field(None, max_length=20)
     color: Optional[str] = Field(None, max_length=50)
+    license_plate: Optional[str] = Field(None, max_length=20)
     mods: Optional[str] = None
     description: Optional[str] = None
     photo_url: Optional[str] = Field(None, max_length=500)
