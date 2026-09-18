@@ -31,6 +31,7 @@ from app.schemas.event import (
 from app.schemas.user import UserPublic
 from app.services import (
     add_room_member,
+    expire_ended_events,
     get_or_create_event_room,
     post_system_message,
     remove_room_member,
@@ -39,6 +40,30 @@ from app.services import (
 from app.utils.geo import bounding_box, haversine_km
 
 router = APIRouter()
+
+
+def _is_approved_club_member(db: Session, club_id: str, user_id: str) -> bool:
+    return (
+        db.query(ClubMember.id)
+        .filter(
+            ClubMember.club_id == club_id,
+            ClubMember.user_id == user_id,
+            ClubMember.status == "approved",
+        )
+        .first()
+        is not None
+    )
+
+
+def _can_view_private_event(db: Session, event: Event, user: Optional[User]) -> bool:
+    """Приватное событие видно создателю, админу и участникам клуба (если это клубное событие)."""
+    if not user:
+        return False
+    if event.creator_id == user.id or user.is_admin:
+        return True
+    if event.club_id and _is_approved_club_member(db, event.club_id, user.id):
+        return True
+    return False
 
 
 def _apply_filters(query, event_type, country, city, club_id, search, only_upcoming):
@@ -125,11 +150,13 @@ def list_events(
     club_id: Optional[str] = None,
     search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
     only_upcoming: bool = Query(True, description="Только будущие события"),
-        sort: str = Query("date", description="date | popular | rating | new"),
+    sort: str = Query("date", description="date | popular | rating | new"),
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    expire_ended_events(db)
+
     query = db.query(Event).filter(
         Event.is_active.is_(True),
         Event.is_cancelled.is_(False),
@@ -148,7 +175,7 @@ def list_events(
     else:
         query = query.order_by(Event.event_date.asc())
 
-        items = query.offset(page.offset).limit(page.limit).all()
+    items = query.offset(page.offset).limit(page.limit).all()
 
     joined_ids: set = set()
     if current_user and items:
@@ -196,6 +223,8 @@ def events_for_map(
     Отдаёт лёгкие метки для отображения на карте.
     Клиент передаёт границы видимой области карты.
     """
+    expire_ended_events(db)
+
     query = db.query(Event).filter(
         Event.is_active.is_(True),
         Event.is_cancelled.is_(False),
@@ -230,6 +259,8 @@ def events_nearby(
     Ищет события в радиусе. Сначала быстрый отсев по прямоугольнику (по индексу),
     затем точный расчёт расстояния по формуле гаверсинуса.
     """
+    expire_ended_events(db)
+
     radius = radius_km or settings.DEFAULT_SEARCH_RADIUS_KM
     min_lat, max_lat, min_lon, max_lon = bounding_box(latitude, longitude, radius)
 
@@ -265,8 +296,13 @@ def get_event(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    expire_ended_events(db)
+
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+
+    if event.is_private and not _can_view_private_event(db, event, current_user):
         raise HTTPException(status_code=404, detail="Событие не найдено")
 
     event.views_count = (event.views_count or 0) + 1
@@ -356,7 +392,13 @@ def join_event(
     if not event:
         raise HTTPException(status_code=404, detail="Событие не найдено")
     if event.is_cancelled or not event.is_active:
-        raise HTTPException(status_code=400, detail="Событие отменено")
+        raise HTTPException(status_code=400, detail="Событие отменено или завершилось")
+
+    if event.is_private and not _can_view_private_event(db, event, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Это закрытое событие — доступно только участникам клуба",
+        )
 
     # Проверяем машину, если указана
     if payload.car_id:
