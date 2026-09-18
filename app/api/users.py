@@ -8,11 +8,11 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import Pagination, get_current_active_user
+from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.car import Car
 from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
-from app.models.user import User
+from app.models.user import User, UserLike
 from app.schemas.car import CarOut
 from app.schemas.event import EventOut
 from app.schemas.user import ReferralInfo, UserMe, UserPublic, UserUpdate
@@ -87,11 +87,57 @@ def get_my_referral(
 
 
 @router.get("/{user_id}", response_model=UserPublic, summary="Профиль пользователя")
-def get_user(user_id: str, db: Session = Depends(get_db)):
+def get_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    return user
+
+    out = UserPublic.model_validate(user)
+    if current_user:
+        out.is_liked = (
+            db.query(UserLike.id)
+            .filter(UserLike.target_user_id == user_id, UserLike.liker_user_id == current_user.id)
+            .first()
+            is not None
+        )
+    return out
+
+
+@router.post("/{user_id}/like", summary="Лайк / снять лайк профиля")
+def toggle_user_like(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя лайкнуть свой профиль")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    existing = (
+        db.query(UserLike)
+        .filter(UserLike.target_user_id == user_id, UserLike.liker_user_id == current_user.id)
+        .first()
+    )
+
+    if existing:
+        db.delete(existing)
+        target.likes_count = max(0, (target.likes_count or 1) - 1)
+        liked = False
+    else:
+        db.add(UserLike(target_user_id=user_id, liker_user_id=current_user.id))
+        target.likes_count = (target.likes_count or 0) + 1
+        liked = True
+
+    db.commit()
+    db.refresh(target)
+    return {"liked": liked, "likes_count": target.likes_count}
 
 
 @router.get(
