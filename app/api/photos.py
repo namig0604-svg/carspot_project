@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.deps import Pagination, get_current_active_user
+from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.car import Car
 from app.models.event import Event
 from app.models.photo import Photo, PhotoLike
@@ -116,6 +116,18 @@ async def upload_photo(
     return photo
 
 
+def _liked_photo_ids(db: Session, user: Optional[User], photo_ids: list) -> set:
+    """Id фото, которые лайкнул текущий пользователь — одним запросом (против N+1)."""
+    if not user or not photo_ids:
+        return set()
+    rows = (
+        db.query(PhotoLike.photo_id)
+        .filter(PhotoLike.user_id == user.id, PhotoLike.photo_id.in_(photo_ids))
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
 @router.get(
     "/event/{event_id}",
     response_model=PhotoListResponse,
@@ -125,6 +137,7 @@ def event_photos(
     event_id: str,
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     query = db.query(Photo).filter(
         Photo.event_id == event_id, Photo.is_approved.is_(True)
@@ -136,7 +149,13 @@ def event_photos(
         .limit(page.limit)
         .all()
     )
-    return PhotoListResponse(total=total, items=[PhotoOut.model_validate(p) for p in items])
+    liked_ids = _liked_photo_ids(db, current_user, [p.id for p in items])
+    out = []
+    for p in items:
+        photo_out = PhotoOut.model_validate(p)
+        photo_out.is_liked = p.id in liked_ids
+        out.append(photo_out)
+    return PhotoListResponse(total=total, items=out)
 
 
 @router.get(
@@ -144,14 +163,24 @@ def event_photos(
     response_model=PhotoListResponse,
     summary="Фото машины",
 )
-def car_photos(car_id: str, db: Session = Depends(get_db)):
+def car_photos(
+    car_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     items = (
         db.query(Photo)
         .filter(Photo.car_id == car_id, Photo.is_approved.is_(True))
         .order_by(Photo.created_at.desc())
         .all()
     )
-    return PhotoListResponse(total=len(items), items=[PhotoOut.model_validate(p) for p in items])
+    liked_ids = _liked_photo_ids(db, current_user, [p.id for p in items])
+    out = []
+    for p in items:
+        photo_out = PhotoOut.model_validate(p)
+        photo_out.is_liked = p.id in liked_ids
+        out.append(photo_out)
+    return PhotoListResponse(total=len(items), items=out)
 
 
 @router.post("/{photo_id}/like", summary="Лайк / снять лайк")
