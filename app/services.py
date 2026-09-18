@@ -2,6 +2,7 @@
 Общая бизнес-логика, которую используют несколько роутеров.
 Здесь нет HTTP — только работа с БД.
 """
+from datetime import timedelta
 from typing import Optional
 
 from sqlalchemy import func
@@ -131,6 +132,38 @@ def is_room_member(db: Session, room_id: str, user_id: str) -> bool:
         .first()
         is not None
     )
+
+
+# ─────────────────────── ЖИЗНЕННЫЙ ЦИКЛ СХОДОК ───────────────────────
+
+def expire_ended_events(db: Session) -> None:
+    """
+    Сходка автоматически перестаёт быть активной, когда истекает её
+    продолжительность (event_date + duration_minutes). Никакого отдельного
+    воркера/крона в проекте нет, поэтому проверка лёгкая и вызывается прямо
+    в местах, где сходки читаются (список, карта, рядом, карточка) — так
+    устаревшие сходки исчезают из выдачи практически сразу после того, как
+    закончились, без нагрузки на каждый запрос (сначала быстрый отсев по
+    event_date, потом точный расчёт в Python).
+    """
+    now = utcnow()
+    candidates = (
+        db.query(Event)
+        .filter(Event.is_active.is_(True), Event.event_date <= now)
+        .all()
+    )
+    if not candidates:
+        return
+
+    changed = False
+    for event in candidates:
+        ends_at = event.event_date + timedelta(minutes=event.duration_minutes or 0)
+        if ends_at < now:
+            event.is_active = False
+            changed = True
+
+    if changed:
+        db.commit()
 
 
 # ─────────────────────── ПЕРЕСЧЁТ РЕЙТИНГОВ ───────────────────────
