@@ -99,6 +99,7 @@ class PhotoOut(BaseModel):
     size_bytes: Optional[int] = None
     caption: Optional[str] = None
     likes_count: int
+    is_liked: bool = False
     is_featured: bool
     created_at: datetime
 
