@@ -8,6 +8,8 @@ from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
 from app.models.event import Event, EventParticipant
 from app.models.friendship import Friendship
+from app.models.notification import Notification
+from app.models.payment import PremiumPayment
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
 from app.models.report import Report
@@ -24,6 +26,8 @@ __all__ = [
     "ChatMember",
     "ChatMessage",
     "Friendship",
+    "Notification",
+    "PremiumPayment",
     "Photo",
     "PhotoLike",
     "EventRating",
