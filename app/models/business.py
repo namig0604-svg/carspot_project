@@ -62,6 +62,9 @@ class Business(Base):
     reviews_count = Column(Integer, default=0, nullable=False)
     views_count = Column(Integer, default=0, nullable=False)
 
+    # --- CarSpot Premium ---
+    boosted_until = Column(DateTime, nullable=True)  # буст поднимает заведение в топ каталога
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
