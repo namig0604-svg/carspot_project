@@ -84,6 +84,7 @@ def _ensure_columns() -> None:
         ("users", "referral_code", "VARCHAR(20)"),
         ("users", "referred_by_id", "VARCHAR(36)"),
         ("users", "ban_reason", "TEXT"),
+        ("users", "likes_count", "INTEGER DEFAULT 0"),
         ("cars", "license_plate", "VARCHAR(20)"),
     ]
     try:
