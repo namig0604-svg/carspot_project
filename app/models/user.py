@@ -40,10 +40,14 @@ class User(Base):
     events_attended = Column(Integer, default=0, nullable=False)
     cars_count = Column(Integer, default=0, nullable=False)
 
+    # --- Реферальная программа ---
+    referral_code = Column(String(20), unique=True, index=True, nullable=True)
+    referred_by_id = Column(String(36), index=True, nullable=True)
+
     # --- Служебное ---
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
-    last_seen_at = Column(DateTime, default=utcnow, nullable=True) 
+    last_seen_at = Column(DateTime, default=utcnow, nullable=True)
     @property
     def is_online(self) -> bool:
         """Онлайн = делал авторизованный запрос за последние ONLINE_THRESHOLD_MINUTES."""
