@@ -32,6 +32,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     is_premium = Column(Boolean, default=False, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    ban_reason = Column(Text, nullable=True)
 
     # --- Статистика (денормализована для скорости) ---
     average_rating = Column(Float, default=0.0, nullable=False)
