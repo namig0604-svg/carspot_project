@@ -56,6 +56,8 @@ class UserPublic(BaseModel):
     events_created: int = 0
     events_attended: int = 0
     cars_count: int = 0
+    likes_count: int = 0
+    is_liked: bool = False
     created_at: datetime
 
 
