@@ -64,6 +64,7 @@ class CarOut(CarBase):
     id: str
     user_id: str
     likes_count: int = 0
+    is_liked: bool = False
     photos: Optional[str] = None
     created_at: datetime
 
