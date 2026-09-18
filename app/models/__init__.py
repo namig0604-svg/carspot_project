@@ -10,7 +10,7 @@ from app.models.event import Event, EventParticipant
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
 from app.models.report import Report
-from app.models.user import User, UserLike
+from app.models.user import ProfileView, User, UserLike
 
 __all__ = [
     "User",
@@ -33,4 +33,5 @@ __all__ = [
     "Report",
     "CarLike",
     "UserLike",
+    "ProfileView",
 ]
