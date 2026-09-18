@@ -55,6 +55,18 @@ def update_me(
     current_user: User = Depends(get_current_active_user),
 ):
     data = payload.model_dump(exclude_unset=True)
+
+    if "username" in data and data["username"]:
+        new_username = data["username"].strip()
+        conflict = (
+            db.query(User)
+            .filter(func.lower(User.username) == new_username.lower(), User.id != current_user.id)
+            .first()
+        )
+        if conflict:
+            raise HTTPException(status_code=400, detail="Такой юзернейм уже занят")
+        data["username"] = new_username
+
     for field, value in data.items():
         setattr(current_user, field, value)
 
