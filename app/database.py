@@ -85,6 +85,12 @@ def _ensure_columns() -> None:
         ("users", "referred_by_id", "VARCHAR(36)"),
         ("users", "ban_reason", "TEXT"),
         ("users", "likes_count", "INTEGER DEFAULT 0"),
+        ("users", "premium_until", "TIMESTAMP"),
+        ("users", "premium_trial_used", "BOOLEAN DEFAULT FALSE"),
+        ("users", "referral_premium_claimed_count", "INTEGER DEFAULT 0"),
+        ("users", "profile_views_count", "INTEGER DEFAULT 0"),
+        ("events", "boosted_until", "TIMESTAMP"),
+        ("businesses", "boosted_until", "TIMESTAMP"),
         ("cars", "license_plate", "VARCHAR(20)"),
     ]
     try:
