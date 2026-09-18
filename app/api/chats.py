@@ -321,8 +321,16 @@ async def upload_chat_image(
     _get_room_or_404(db, room_id)
     _require_member(db, room_id, current_user.id)
 
-    if file.content_type and file.content_type not in settings.ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail=f"Неподдерживаемый формат: {file.content_type}")
+    # Content-Type от клиента ненадёжен (Flutter/http шлёт application/octet-stream
+    # по умолчанию, если не указать contentType явно) — проверяем по расширению файла,
+    # как и при сохранении в _save_chat_image.
+    filename = file.filename or ""
+    extension = (filename.rsplit(".", 1)[-1] if "." in filename else "").lower()
+    if extension not in ("jpg", "jpeg", "png", "webp", "heic"):
+        raise HTTPException(
+            status_code=400,
+            detail="Поддерживаются только изображения: jpg, png, webp, heic",
+        )
 
     contents = await file.read()
     if len(contents) > settings.MAX_UPLOAD_SIZE:
