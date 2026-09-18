@@ -15,7 +15,7 @@ from app.models.event import Event, EventParticipant
 from app.models.user import User
 from app.schemas.car import CarOut
 from app.schemas.event import EventOut
-from app.schemas.user import UserMe, UserPublic, UserUpdate
+from app.schemas.user import ReferralInfo, UserMe, UserPublic, UserUpdate
 
 router = APIRouter()
 
@@ -73,6 +73,17 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.get("/me/referral", response_model=ReferralInfo, summary="Свой реферальный код и число приглашённых")
+def get_my_referral(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    referrals_count = (
+        db.query(User).filter(User.referred_by_id == current_user.id).count()
+    )
+    return ReferralInfo(code=current_user.referral_code, referrals_count=referrals_count)
 
 
 @router.get("/{user_id}", response_model=UserPublic, summary="Профиль пользователя")
