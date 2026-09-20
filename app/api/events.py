@@ -15,7 +15,7 @@ from app.models.base import utcnow
 from app.models.car import Car
 from app.models.chat import ChatRoom
 from app.models.club import ClubMember
-from app.models.event import Event, EventParticipant
+from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.rating import EventRating
 from app.models.user import User
 from app.schemas.event import (
@@ -54,6 +54,17 @@ def _is_approved_club_member(db: Session, club_id: str, user_id: str) -> bool:
         .first()
         is not None
     )
+
+
+def _favorite_ids(db: Session, user: Optional[User], event_ids: List[str]) -> set:
+    if not user or not event_ids:
+        return set()
+    return {
+        row[0]
+        for row in db.query(EventFavorite.event_id)
+        .filter(EventFavorite.user_id == user.id, EventFavorite.event_id.in_(event_ids))
+        .all()
+    }
 
 
 def _can_view_private_event(db: Session, event: Event, user: Optional[User]) -> bool:
@@ -194,11 +205,13 @@ def list_events(
             )
             .all()
         }
+    favorite_ids = _favorite_ids(db, current_user, [e.id for e in items])
 
     out_items = []
     for e in items:
         item = EventOut.model_validate(e)
         item.is_joined = e.id in joined_ids
+        item.is_favorite = e.id in favorite_ids
         out_items.append(item)
 
     return EventListResponse(
@@ -295,6 +308,51 @@ def events_nearby(
     return result[:limit]
 
 
+@router.get(
+    "/my/favorites",
+    response_model=List[EventOut],
+    summary="Мои избранные сходки",
+)
+def my_favorite_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    event_ids = [
+        row[0]
+        for row in db.query(EventFavorite.event_id)
+        .filter(EventFavorite.user_id == current_user.id)
+        .all()
+    ]
+    if not event_ids:
+        return []
+
+    events = (
+        db.query(Event)
+        .filter(Event.id.in_(event_ids), Event.is_active.is_(True))
+        .order_by(Event.event_date.desc())
+        .all()
+    )
+
+    joined_ids = {
+        row[0]
+        for row in db.query(EventParticipant.event_id)
+        .filter(
+            EventParticipant.event_id.in_(event_ids),
+            EventParticipant.user_id == current_user.id,
+            EventParticipant.status.in_(("going", "maybe")),
+        )
+        .all()
+    }
+
+    result = []
+    for e in events:
+        item = EventOut.model_validate(e)
+        item.is_joined = e.id in joined_ids
+        item.is_favorite = True
+        result.append(item)
+    return result
+
+
 @router.get("/{event_id}", response_model=EventDetail, summary="Карточка сходки")
 def get_event(
     event_id: str,
@@ -332,6 +390,12 @@ def get_event(
                 EventParticipant.user_id == current_user.id,
                 EventParticipant.status.in_(("going", "maybe")),
             )
+            .first()
+            is not None
+        )
+        detail.is_favorite = (
+            db.query(EventFavorite.id)
+            .filter(EventFavorite.event_id == event.id, EventFavorite.user_id == current_user.id)
             .first()
             is not None
         )
@@ -583,3 +647,38 @@ def list_participants(
             item.user = UserPublic.model_validate(user)
         result.append(item)
     return result
+
+
+# ─────────────────────────── ИЗБРАННОЕ ───────────────────────────
+
+@router.post("/{event_id}/favorite", summary="Добавить сходку в избранное")
+def add_event_favorite(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if not db.query(Event.id).filter(Event.id == event_id).first():
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+
+    exists = (
+        db.query(EventFavorite)
+        .filter(EventFavorite.event_id == event_id, EventFavorite.user_id == current_user.id)
+        .first()
+    )
+    if not exists:
+        db.add(EventFavorite(event_id=event_id, user_id=current_user.id))
+        db.commit()
+    return {"message": "Добавлено в избранное", "is_favorite": True}
+
+
+@router.delete("/{event_id}/favorite", summary="Убрать сходку из избранного")
+def remove_event_favorite(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    db.query(EventFavorite).filter(
+        EventFavorite.event_id == event_id, EventFavorite.user_id == current_user.id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Убрано из избранного", "is_favorite": False}
