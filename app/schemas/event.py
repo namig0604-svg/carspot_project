@@ -108,6 +108,7 @@ class EventOut(BaseModel):
     is_cancelled: bool
     created_at: datetime
     is_joined: bool = False
+    is_favorite: bool = False
 
 
 class EventDetail(EventOut):
