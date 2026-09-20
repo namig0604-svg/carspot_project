@@ -45,6 +45,7 @@ class ClubOut(BaseModel):
     members_count: int
     events_count: int
     created_at: datetime
+    is_favorite: bool = False
 
 
 class ClubDetail(ClubOut):
