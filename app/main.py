@@ -128,6 +128,7 @@ from app.api import (  # noqa: E402
     photos,
     ratings,
     reports,
+    stories,
     users,
 )
 
@@ -144,5 +145,6 @@ app.include_router(notifications.router, prefix="/api/notifications", tags=["У�
 app.include_router(payments.router, prefix="/api/payments", tags=["Платежи"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])
 app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
+app.include_router(stories.router, prefix="/api/stories", tags=["Истории"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Жалобы"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Админка"])
