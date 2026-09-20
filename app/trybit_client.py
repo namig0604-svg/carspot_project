@@ -17,11 +17,18 @@ class TrybitError(Exception):
     pass
 
 
+class TrybitNotConfiguredError(TrybitError):
+    """Магазин Trybit ещё не подключён (нет ключей в переменных окружения).
+
+    Это не сбой платёжного шлюза, а ожидаемое состояние, пока не оформлен
+    мерчант-аккаунт — поэтому обрабатывается отдельно от TrybitError и не
+    должно возвращаться клиенту как 502."""
+
+
 def create_invoice(*, order_id: str, amount_usd: float, email: str = None) -> dict:
     if not settings.TRYBIT_SHOP_ID or not settings.TRYBIT_API_KEY:
-        raise TrybitError(
-            "Trybit не настроен: задайте TRYBIT_SHOP_ID и TRYBIT_API_KEY "
-            "в переменных окружения Railway"
+        raise TrybitNotConfiguredError(
+            "Оплата Premium пока недоступна: платёжная система ещё не подключена"
         )
 
     payload = {
