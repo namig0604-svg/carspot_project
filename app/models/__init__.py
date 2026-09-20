@@ -6,6 +6,7 @@ from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubMember
+from app.models.comment import Comment
 from app.models.event import Event, EventParticipant
 from app.models.friendship import Friendship
 from app.models.notification import Notification
@@ -13,6 +14,7 @@ from app.models.payment import PremiumPayment
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
 from app.models.report import Report
+from app.models.story import Story, StoryView
 from app.models.user import ProfileView, User, UserLike
 
 __all__ = [
@@ -25,6 +27,7 @@ __all__ = [
     "ChatRoom",
     "ChatMember",
     "ChatMessage",
+    "Comment",
     "Friendship",
     "Notification",
     "PremiumPayment",
@@ -37,6 +40,8 @@ __all__ = [
     "BusinessReview",
     "BusinessFavorite",
     "Report",
+    "Story",
+    "StoryView",
     "CarLike",
     "UserLike",
     "ProfileView",
