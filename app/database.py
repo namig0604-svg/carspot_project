@@ -109,6 +109,41 @@ def _ensure_columns() -> None:
         print(f"[DB] Ошибка _ensure_columns: {exc}")
 
 
+def _fix_legacy_columns() -> None:
+    """
+    Колонки, которые раньше были обычными полями модели, а потом стали
+    вычисляемыми @property (например users.is_premium → premium_until).
+    ORM больше их не заполняет при INSERT, а в базе они могли остаться
+    с NOT NULL без DEFAULT — тогда любая вставка падает с NotNullViolation.
+    Снимаем NOT NULL, чтобы старая колонка не мешала (сама она не используется).
+    """
+    if DATABASE_URL.startswith("sqlite"):
+        return  # SQLite не поддерживает ALTER COLUMN ... DROP NOT NULL
+
+    fixes = [
+        ("users", "is_premium"),
+    ]
+    try:
+        with engine.connect() as conn:
+            for table, column in fixes:
+                try:
+                    if column not in _existing_columns(conn, table):
+                        continue
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ALTER COLUMN {column} DROP NOT NULL")
+                    )
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT false")
+                    )
+                    conn.commit()
+                    print(f"[DB] Снят NOT NULL с устаревшей колонки {table}.{column}")
+                except Exception as exc:
+                    print(f"[DB] Не удалось починить {table}.{column}: {exc}")
+                    conn.rollback()
+    except Exception as exc:
+        print(f"[DB] Ошибка _fix_legacy_columns: {exc}")
+
+
 def _backfill_referral_codes() -> None:
     """Выдаёт реферальный код каждому аккаунту, у которого его пока нет."""
     import random
@@ -164,6 +199,7 @@ def init_db() -> bool:
         from app import models
         Base.metadata.create_all(bind=engine)
         _ensure_columns()
+        _fix_legacy_columns()
         _backfill_referral_codes()
         print("[DB] Таблицы готовы")
         return True
