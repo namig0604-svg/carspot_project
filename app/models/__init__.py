@@ -9,7 +9,7 @@ from app.models.club import Club, ClubFavorite, ClubMember
 from app.models.comment import Comment
 from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.friendship import Friendship
-from app.models.notification import Notification
+from app.models.notification import DeviceToken, Notification
 from app.models.payment import PremiumPayment
 from app.models.photo import Photo, PhotoLike
 from app.models.rating import EventRating, SpotRating, UserRating
@@ -32,6 +32,7 @@ __all__ = [
     "Comment",
     "Friendship",
     "Notification",
+    "DeviceToken",
     "PremiumPayment",
     "Photo",
     "PhotoLike",

@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.user import UserPublic
 
@@ -30,3 +30,8 @@ class NotificationListResponse(BaseModel):
 
 class UnreadCountOut(BaseModel):
     unread_count: int
+
+
+class DeviceTokenIn(BaseModel):
+    token: str = Field(..., min_length=10, max_length=500, description="FCM registration token")
+    platform: str = Field("android", examples=["android", "ios"])

@@ -249,6 +249,58 @@ def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) ->
 
 # ─────────────────────────── УВЕДОМЛЕНИЯ ───────────────────────────
 
+_PUSH_TITLES = {
+    "friend_request": "🤝 Заявка в друзья",
+    "friend_accepted": "🤝 Новый друг",
+    "profile_like": "❤️ Новый лайк",
+    "event_join": "🏁 Новый участник",
+    "comment_event": "💬 Новый комментарий",
+    "comment_photo": "💬 Новый комментарий",
+}
+
+
+def _send_push_to_user(
+    db: Session,
+    user_id: str,
+    type_: str,
+    message: str,
+    target_type: Optional[str],
+    target_id: Optional[str],
+) -> None:
+    """Best-effort рассылка push на все устройства пользователя. Никогда не
+    бросает исключение наружу — push вторичен по отношению к самому
+    уведомлению, отсутствие настроенного Firebase не должно ронять запрос."""
+    from app.models.notification import DeviceToken
+    from app.push_client import PushError, PushNotConfiguredError, send_push
+
+    tokens = db.query(DeviceToken).filter(DeviceToken.user_id == user_id).all()
+    if not tokens:
+        return
+
+    title = _PUSH_TITLES.get(type_, "CarSpot")
+    data = {"type": type_}
+    if target_type:
+        data["target_type"] = target_type
+    if target_id:
+        data["target_id"] = target_id
+
+    for dt in tokens:
+        try:
+            send_push(dt.token, title, message, data=data)
+        except PushNotConfiguredError:
+            # Firebase ещё не подключён — не мучаем попробовать остальные токены.
+            return
+        except PushError as e:
+            text = str(e)
+            if "UNREGISTERED" in text or "NOT_FOUND" in text or "INVALID_ARGUMENT" in text:
+                # Токен отозван/устарел (переустановка приложения, сменил
+                # устройство) — чистим, чтобы не долбиться в пустоту.
+                db.query(DeviceToken).filter(DeviceToken.id == dt.id).delete(synchronize_session=False)
+            print(f"[PUSH] Ошибка отправки: {e}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[PUSH] Неожиданная ошибка: {e}")
+
+
 def notify(
     db: Session,
     *,
@@ -277,9 +329,15 @@ def notify(
             message=message,
         )
         db.add(n)
-        return n
     except Exception:  # noqa: BLE001
         return None
+
+    try:
+        _send_push_to_user(db, user_id, type, message, target_type, target_id)
+    except Exception as e:  # noqa: BLE001
+        print(f"[PUSH] Ошибка рассылки: {e}")
+
+    return n
 
 
 # ─────────────────────── ХЕЛПЕРЫ ОТВЕТОВ ───────────────────────

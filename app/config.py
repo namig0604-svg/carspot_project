@@ -65,4 +65,12 @@ class Settings:
     TRYBIT_SHOP_ID: str = os.getenv("TRYBIT_SHOP_ID", "")
     TRYBIT_API_KEY: str = os.getenv("TRYBIT_API_KEY", "")
     TRYBIT_SECRET_KEY: str = os.getenv("TRYBIT_SECRET_KEY", "")
+
+    # --- Push-уведомления (Firebase Cloud Messaging) ---
+    FIREBASE_PROJECT_ID: str = os.getenv("FIREBASE_PROJECT_ID", "")
+    # Весь JSON сервисного аккаунта одной строкой — Firebase Console →
+    # Настройки проекта → Сервисные аккаунты → "Создать новый закрытый ключ",
+    # содержимое скачанного файла целиком вставляем как значение
+    # переменной окружения на Railway.
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 settings = Settings()

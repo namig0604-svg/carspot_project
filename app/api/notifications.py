@@ -8,9 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
-from app.models.notification import Notification
+from app.models.notification import DeviceToken, Notification
 from app.models.user import User
-from app.schemas.notification import NotificationListResponse, NotificationOut, UnreadCountOut
+from app.schemas.notification import (
+    DeviceTokenIn,
+    NotificationListResponse,
+    NotificationOut,
+    UnreadCountOut,
+)
 from app.schemas.user import UserPublic
 from app.services import users_by_ids
 
@@ -94,3 +99,41 @@ def read_one(
     n.is_read = True
     db.commit()
     return {"message": "Отмечено прочитанным"}
+
+
+# ──────────────────────────────────────────────── PUSH-ТОКЕНЫ УСТРОЙСТВ ────────────────────────────────────────────────
+
+@router.post("/device-token", summary="Зарегистрировать токен устройства для push")
+def register_device_token(
+    payload: DeviceTokenIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Выызвается с клиента после логина и при обновлении FCM-токена
+    (firebase_messaging сам присылает новый токен время от времени).
+    Один и тот же токен переприсылаем на текущего пользователя — это
+    покрывает случай выхода из одного аккаунта и входа в другой на том же
+    устройстве.
+    """
+    existing = db.query(DeviceToken).filter(DeviceToken.token == payload.token).first()
+    if existing:
+        existing.user_id = current_user.id
+        existing.platform = payload.platform
+    else:
+        db.add(DeviceToken(user_id=current_user.id, token=payload.token, platform=payload.platform))
+    db.commit()
+    return {"message": "Токен зарегистрирован"}
+
+
+@router.delete("/device-token", summary="Удалить токен устройства (например, при выходе)")
+def remove_device_token(
+    token: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    db.query(DeviceToken).filter(
+        DeviceToken.token == token, DeviceToken.user_id == current_user.id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Токен удалён"}
