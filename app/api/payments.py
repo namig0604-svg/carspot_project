@@ -15,7 +15,7 @@ from app.models.payment import PremiumPayment
 from app.models.user import User
 from app.schemas.payment import CheckoutOut, CheckoutRequest, PaymentStatusOut, PremiumPlanOut
 from app.services import extend_premium
-from app.trybit_client import TrybitError, create_invoice, verify_postback_token
+from app.trybit_client import TrybitError, TrybitNotConfiguredError, create_invoice, verify_postback_token
 
 router = APIRouter()
 
@@ -56,6 +56,11 @@ def checkout(
 
     try:
         result = create_invoice(order_id=order_id, amount_usd=plan["amount_usd"], email=current_user.email)
+    except TrybitNotConfiguredError as e:
+        # Ожидаемое состояние, пока не подключён мерчант-аккаунт — не 502,
+        # чтобы не выглядело как сбой сервера.
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except TrybitError as e:
         db.rollback()
         raise HTTPException(status_code=502, detail=str(e))
