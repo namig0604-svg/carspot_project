@@ -5,9 +5,9 @@
 from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
-from app.models.club import Club, ClubMember
+from app.models.club import Club, ClubFavorite, ClubMember
 from app.models.comment import Comment
-from app.models.event import Event, EventParticipant
+from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.friendship import Friendship
 from app.models.notification import Notification
 from app.models.payment import PremiumPayment
@@ -22,8 +22,10 @@ __all__ = [
     "Car",
     "Event",
     "EventParticipant",
+    "EventFavorite",
     "Club",
     "ClubMember",
+    "ClubFavorite",
     "ChatRoom",
     "ChatMember",
     "ChatMessage",
@@ -46,3 +48,4 @@ __all__ = [
     "UserLike",
     "ProfileView",
 ]
+
