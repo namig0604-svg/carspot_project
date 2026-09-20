@@ -57,3 +57,17 @@ class ClubMember(Base):
     role = Column(String(20), default="member", nullable=False)   # owner / admin / member
     status = Column(String(20), default="approved", nullable=False)  # approved / pending
     joined_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class ClubFavorite(Base):
+    """Избранные клубы пользователя (по аналогии с BusinessFavorite)."""
+
+    __tablename__ = "club_favorites"
+    __table_args__ = (
+        UniqueConstraint("club_id", "user_id", name="uq_club_favorite"),
+    )
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    club_id = Column(String(36), index=True, nullable=False)
+    user_id = Column(String(36), index=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
