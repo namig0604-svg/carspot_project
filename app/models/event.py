@@ -96,5 +96,19 @@ class EventParticipant(Base):
     joined_at = Column(DateTime, default=utcnow, nullable=False)
 
 
+class EventFavorite(Base):
+    """Избранные сходки пользователя (по аналогии с BusinessFavorite)."""
+
+    __tablename__ = "event_favorites"
+    __table_args__ = (
+        UniqueConstraint("event_id", "user_id", name="uq_event_favorite"),
+    )
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    event_id = Column(String(36), index=True, nullable=False)
+    user_id = Column(String(36), index=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
 Index("ix_events_geo", Event.latitude, Event.longitude)
 Index("ix_events_date_active", Event.event_date, Event.is_active)
