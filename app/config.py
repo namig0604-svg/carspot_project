@@ -61,5 +61,8 @@ class Settings:
     # Сколько строк отдаём в списках "кто лайкнул" / "кто смотрел профиль".
     PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 50)
 
-
+    # --- Trybit (крипто-эквайринг для оплаты Premium, работает в СНГ) ---
+    TRYBIT_SHOP_ID: str = os.getenv("TRYBIT_SHOP_ID", "")
+    TRYBIT_API_KEY: str = os.getenv("TRYBIT_API_KEY", "")
+    TRYBIT_SECRET_KEY: str = os.getenv("TRYBIT_SECRET_KEY", "")
 settings = Settings()
