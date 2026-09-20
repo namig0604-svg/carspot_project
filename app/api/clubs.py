@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
-from app.models.club import Club, ClubMember
+from app.models.club import Club, ClubFavorite, ClubMember
 from app.models.event import Event
 from app.models.rating import EventRating
 from app.models.user import User
@@ -67,6 +67,17 @@ def _refresh_members_count(db: Session, club: Club) -> None:
     )
 
 
+def _favorite_ids(db: Session, user: Optional[User], club_ids: List[str]) -> set:
+    if not user or not club_ids:
+        return set()
+    return {
+        row[0]
+        for row in db.query(ClubFavorite.club_id)
+        .filter(ClubFavorite.user_id == user.id, ClubFavorite.club_id.in_(club_ids))
+        .all()
+    }
+
+
 @router.post(
     "/",
     response_model=ClubDetail,
@@ -118,6 +129,7 @@ def list_clubs(
     city: Optional[str] = None,
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     query = db.query(Club)
 
@@ -139,11 +151,18 @@ def list_clubs(
         .all()
     )
 
+    favorite_ids = _favorite_ids(db, current_user, [c.id for c in items])
+    out_items = []
+    for c in items:
+        item = ClubOut.model_validate(c)
+        item.is_favorite = c.id in favorite_ids
+        out_items.append(item)
+
     return ClubListResponse(
         total=total,
         limit=page.limit,
         offset=page.offset,
-        items=[ClubOut.model_validate(c) for c in items],
+        items=out_items,
     )
 
 
@@ -160,7 +179,14 @@ def my_clubs(
     ]
     if not club_ids:
         return []
-    return db.query(Club).filter(Club.id.in_(club_ids)).order_by(Club.name.asc()).all()
+    clubs = db.query(Club).filter(Club.id.in_(club_ids)).order_by(Club.name.asc()).all()
+    favorite_ids = _favorite_ids(db, current_user, club_ids)
+    result = []
+    for c in clubs:
+        item = ClubOut.model_validate(c)
+        item.is_favorite = c.id in favorite_ids
+        result.append(item)
+    return result
 
 
 @router.get(
@@ -236,6 +262,33 @@ def clubs_leaderboard(
     return items[:limit]
 
 
+@router.get(
+    "/my/favorites",
+    response_model=List[ClubOut],
+    summary="Мои избранные клубы",
+)
+def my_favorite_clubs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    club_ids = [
+        row[0]
+        for row in db.query(ClubFavorite.club_id)
+        .filter(ClubFavorite.user_id == current_user.id)
+        .all()
+    ]
+    if not club_ids:
+        return []
+
+    clubs = db.query(Club).filter(Club.id.in_(club_ids)).order_by(Club.name.asc()).all()
+    result = []
+    for c in clubs:
+        item = ClubOut.model_validate(c)
+        item.is_favorite = True
+        result.append(item)
+    return result
+
+
 @router.get("/{club_id}", response_model=ClubDetail, summary="Карточка клуба")
 def get_club(
     club_id: str,
@@ -258,6 +311,12 @@ def get_club(
         if membership:
             detail.my_role = membership.role
             detail.my_status = membership.status
+        detail.is_favorite = (
+            db.query(ClubFavorite.id)
+            .filter(ClubFavorite.club_id == club.id, ClubFavorite.user_id == current_user.id)
+            .first()
+            is not None
+        )
 
     return detail
 
@@ -542,3 +601,37 @@ def club_events(
         .limit(page.limit)
         .all()
     )
+
+
+# ─────────────────────────── ИЗБРАННОЕ ───────────────────────────
+
+@router.post("/{club_id}/favorite", summary="Добавить клуб в избранное")
+def add_club_favorite(
+    club_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    _get_club_or_404(db, club_id)
+
+    exists = (
+        db.query(ClubFavorite)
+        .filter(ClubFavorite.club_id == club_id, ClubFavorite.user_id == current_user.id)
+        .first()
+    )
+    if not exists:
+        db.add(ClubFavorite(club_id=club_id, user_id=current_user.id))
+        db.commit()
+    return {"message": "Добавлено в избранное", "is_favorite": True}
+
+
+@router.delete("/{club_id}/favorite", summary="Убрать клуб из избранного")
+def remove_club_favorite(
+    club_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    db.query(ClubFavorite).filter(
+        ClubFavorite.club_id == club_id, ClubFavorite.user_id == current_user.id
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Убрано из избранного", "is_favorite": False}
