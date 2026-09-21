@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app.api.clubs import refresh_events_count
 from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
@@ -142,6 +143,9 @@ def create_event(
 
     current_user.events_created = (current_user.events_created or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
+
+    if event.club_id:
+        refresh_events_count(db, event.club_id)
 
     db.commit()
     db.refresh(event)
@@ -478,6 +482,31 @@ def delete_event(
 
     event.is_active = False
     event.is_cancelled = True
+
+    # Отмена организатором — это не то же самое, что каждый участник сам
+    # вышел (leave_event), но счётчик посещений на профиле не должен
+    # оставаться завышенным навсегда: снимаем +1, который получил каждый
+    # участник (в т.ч. сам создатель) при join_event/create_event.
+    attendee_ids = [
+        row[0]
+        for row in db.query(EventParticipant.user_id)
+        .filter(
+            EventParticipant.event_id == event_id,
+            EventParticipant.status.in_(("going", "maybe")),
+        )
+        .all()
+    ]
+    if attendee_ids:
+        for user in db.query(User).filter(User.id.in_(attendee_ids)).all():
+            user.events_attended = max(0, (user.events_attended or 1) - 1)
+
+    if event.club_id:
+        # flush обязателен: refresh_events_count пересчитывает COUNT(...) новым
+        # запросом, а session здесь с autoflush=False — без явного flush он бы
+        # не увидел ещё не отправленное в БД is_active=False у event.
+        db.flush()
+        refresh_events_count(db, event.club_id)
+
     db.commit()
     return {"message": "Событие отменено", "event_id": event_id}
 
@@ -528,8 +557,18 @@ def join_event(
             "participants_count": event.participants_count,
         }
 
-    if event.max_participants and event.participants_count >= event.max_participants:
-        raise HTTPException(status_code=400, detail="Достигнут лимит участников")
+    if event.max_participants:
+        # Блокируем строку события на время проверки лимита — иначе два
+        # запроса join одновременно могут оба увидеть место и оба пройти
+        # (гонка), переполнив лимит участников.
+        event = (
+            db.query(Event)
+            .filter(Event.id == event_id)
+            .with_for_update()
+            .first()
+        )
+        if event.participants_count >= event.max_participants:
+            raise HTTPException(status_code=400, detail="Достигнут лимит участников")
 
     if participant:  # ранее вышел — возвращаем
         participant.status = payload.status

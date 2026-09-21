@@ -4,6 +4,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -137,7 +138,13 @@ def toggle_car_like(
         car.likes_count = (car.likes_count or 0) + 1
         liked = True
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        car = db.query(Car).filter(Car.id == car_id).first()
+        return {"liked": True, "likes_count": car.likes_count if car else 0}
+
     db.refresh(car)
     return {"liked": liked, "likes_count": car.likes_count}
 

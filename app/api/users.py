@@ -5,9 +5,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.api.events import _can_view_private_event
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.base import utcnow
@@ -260,7 +262,16 @@ def toggle_user_like(
             message=f"{current_user.username} лайкнул(а) твой профиль",
         )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Двойной тап по кнопке лайка: два запроса одновременно не увидели
+        # существующую запись, оба попытались вставить — уникальный индекс
+        # не даёт задублировать. Это не ошибка сервера, а "уже лайкнуто".
+        db.rollback()
+        target = db.query(User).filter(User.id == user_id).first()
+        return {"liked": True, "likes_count": target.likes_count if target else 0}
+
     db.refresh(target)
     return {"liked": liked, "likes_count": target.likes_count}
 
@@ -328,15 +339,19 @@ def get_user_events(
     user_id: str,
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    return (
+    events = (
         db.query(Event)
         .filter(Event.creator_id == user_id, Event.is_active.is_(True))
         .order_by(Event.event_date.desc())
-        .offset(page.offset)
-        .limit(page.limit)
         .all()
     )
+    visible = [
+        e for e in events
+        if not e.is_private or _can_view_private_event(db, e, current_user)
+    ]
+    return visible[page.offset : page.offset + page.limit]
 
 
 @router.get(
@@ -348,6 +363,7 @@ def get_user_attending(
     user_id: str,
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     event_ids = [
         row[0]
@@ -361,11 +377,14 @@ def get_user_attending(
     if not event_ids:
         return []
 
-    return (
+    events = (
         db.query(Event)
         .filter(Event.id.in_(event_ids), Event.is_active.is_(True))
         .order_by(Event.event_date.desc())
-        .offset(page.offset)
-        .limit(page.limit)
         .all()
     )
+    visible = [
+        e for e in events
+        if not e.is_private or _can_view_private_event(db, e, current_user)
+    ]
+    return visible[page.offset : page.offset + page.limit]

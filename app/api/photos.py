@@ -19,6 +19,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -208,7 +209,13 @@ def toggle_like(
         photo.likes_count = (photo.likes_count or 0) + 1
         liked = True
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        photo = db.query(Photo).filter(Photo.id == photo_id).first()
+        return {"liked": True, "likes_count": photo.likes_count if photo else 0}
+
     db.refresh(photo)
     return {"liked": liked, "likes_count": photo.likes_count}
 

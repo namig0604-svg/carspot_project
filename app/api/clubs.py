@@ -67,6 +67,19 @@ def _refresh_members_count(db: Session, club: Club) -> None:
     )
 
 
+def refresh_events_count(db: Session, club_id: str) -> None:
+    """Пересчитывает Club.events_count живым запросом (те же критерии, что
+    и у /clubs/leaderboard) — вызывается при создании/отмене события клуба."""
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        return
+    club.events_count = (
+        db.query(Event)
+        .filter(Event.club_id == club_id, Event.is_active.is_(True))
+        .count()
+    )
+
+
 def _favorite_ids(db: Session, user: Optional[User], club_ids: List[str]) -> set:
     if not user or not club_ids:
         return set()
