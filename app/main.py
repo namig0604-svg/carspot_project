@@ -78,6 +78,11 @@ app.add_middleware(
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
+# Веб-версия приложения (flutter build web) — тестовый доступ с любого
+# устройства и браузера, включая iOS, без установки APK.
+if os.path.isdir("web_static"):
+    app.mount("/app", StaticFiles(directory="web_static", html=True), name="webapp")
+
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
