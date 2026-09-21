@@ -35,6 +35,16 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=6, max_length=72)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., examples=["namig@example.com"])
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, examples=["123456"])
+    new_password: str = Field(..., min_length=6, max_length=72)
+
+
 class UserPublic(BaseModel):
     """Профиль, видимый другим пользователям."""
 

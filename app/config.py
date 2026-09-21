@@ -73,4 +73,14 @@ class Settings:
     # содержимое скачанного файла целиком вставляем как значение
     # переменной окружения на Railway.
     FIREBASE_SERVICE_ACCOUNT_JSON: str = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+
+    # --- Восстановление пароля (письмо с кодом через Gmail SMTP) ---
+    # На Railway: включите двухфакторку на Gmail-аккаунте и создайте
+    # "пароль приложения" (myaccount.google.com/apppasswords) — обычный
+    # пароль от аккаунта тут не сработает. Если переменные не заданы,
+    # письма просто не отправляются (не роняем приложение).
+    GMAIL_ADDRESS: str = os.getenv("GMAIL_ADDRESS", "")
+    GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
+    GMAIL_SENDER_NAME: str = os.getenv("GMAIL_SENDER_NAME", "CarSpot")
+    PASSWORD_RESET_CODE_TTL_MINUTES: int = _get_int("PASSWORD_RESET_CODE_TTL_MINUTES", 30)
 settings = Settings()

@@ -44,6 +44,30 @@ from app.utils.geo import bounding_box, haversine_km
 router = APIRouter()
 
 
+def _recommended_score(item, latitude: float, longitude: float) -> float:
+    """Смешивает близость и рейтинг сходки в одно число (см. такую же
+    функцию в app/api/businesses.py — тот же принцип)."""
+    if item.latitude is None or item.longitude is None:
+        proximity = 0.0
+    else:
+        distance = haversine_km(latitude, longitude, item.latitude, item.longitude)
+        proximity = max(0.0, 1.0 - min(distance, 250.0) / 250.0)
+
+    rating = max(0.0, min(5.0, item.average_rating or 0.0)) / 5.0
+    score = 0.6 * proximity + 0.4 * rating
+
+    if item.boosted_until and item.boosted_until > utcnow():
+        score += 10.0
+
+    return score
+
+
+def _rank_by_recommended(candidates: list, latitude: float, longitude: float) -> list:
+    scored = [(_recommended_score(c, latitude, longitude), c) for c in candidates]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [c for _score, c in scored]
+
+
 def _is_approved_club_member(db: Session, club_id: str, user_id: str) -> bool:
     return (
         db.query(ClubMember.id)
@@ -166,7 +190,9 @@ def list_events(
     club_id: Optional[str] = None,
     search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
     only_upcoming: bool = Query(True, description="Только будущие события"),
-    sort: str = Query("date", description="date | popular | rating | new"),
+    sort: str = Query("date", description="date | recommended | popular | rating | new"),
+    latitude: Optional[float] = Query(None, ge=-90, le=90, description="Широта пользователя (для sort=recommended)"),
+    longitude: Optional[float] = Query(None, ge=-180, le=180, description="Долгота пользователя (для sort=recommended)"),
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
@@ -186,16 +212,22 @@ def list_events(
     # независимо от выбранной сортировки — а внутри этой группы порядок обычный.
     boosted_rank = case((Event.boosted_until > utcnow(), 0), else_=1)
 
-    if sort == "popular":
-        query = query.order_by(boosted_rank, Event.participants_count.desc(), Event.event_date.asc())
-    elif sort == "rating":
-        query = query.order_by(boosted_rank, Event.average_rating.desc(), Event.ratings_count.desc())
-    elif sort == "new":
-        query = query.order_by(boosted_rank, Event.created_at.desc())
+    if sort == "recommended" and latitude is not None and longitude is not None:
+        # "Рекомендовано": ближайшие и с лучшим рейтингом сходки — выше.
+        # Считаем на ограниченном наборе кандидатов, как и в /nearby.
+        candidates = query.order_by(boosted_rank, Event.event_date.asc()).limit(1000).all()
+        ranked = _rank_by_recommended(candidates, latitude, longitude)
+        items = ranked[page.offset : page.offset + page.limit]
     else:
-        query = query.order_by(boosted_rank, Event.event_date.asc())
-
-    items = query.offset(page.offset).limit(page.limit).all()
+        if sort == "popular":
+            query = query.order_by(boosted_rank, Event.participants_count.desc(), Event.event_date.asc())
+        elif sort == "rating":
+            query = query.order_by(boosted_rank, Event.average_rating.desc(), Event.ratings_count.desc())
+        elif sort == "new":
+            query = query.order_by(boosted_rank, Event.created_at.desc())
+        else:
+            query = query.order_by(boosted_rank, Event.event_date.asc())
+        items = query.offset(page.offset).limit(page.limit).all()
 
     joined_ids: set = set()
     if current_user and items:

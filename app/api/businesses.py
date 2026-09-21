@@ -32,6 +32,43 @@ from app.utils.geo import bounding_box, haversine_km
 router = APIRouter()
 
 
+def _recommended_score(
+    item, latitude: float, longitude: float, item_lat, item_lon, boosted_until
+) -> float:
+    """Смешивает близость и рейтинг в одно число (больше — выше в списке).
+
+    proximity: 1.0 рядом (0 км) → 0.0 далеко (250+ км), убывает плавно.
+    rating: 0.0..1.0 от average_rating (шкала 0..5).
+    Бустнутые Premium-записи получают крупный бонус, чтобы остаться в топе,
+    как и при обычных сортировках каталога.
+    """
+    if item_lat is None or item_lon is None:
+        proximity = 0.0  # неизвестные координаты — не выигрывают за близость
+    else:
+        distance = haversine_km(latitude, longitude, item_lat, item_lon)
+        proximity = max(0.0, 1.0 - min(distance, 250.0) / 250.0)
+
+    rating = max(0.0, min(5.0, item.average_rating or 0.0)) / 5.0
+    score = 0.6 * proximity + 0.4 * rating
+
+    if boosted_until and boosted_until > utcnow():
+        score += 10.0  # бустнутые всегда выше не бустнутых
+
+    return score
+
+
+def _rank_by_recommended(candidates: list, latitude: float, longitude: float) -> list:
+    scored = [
+        (
+            _recommended_score(c, latitude, longitude, c.latitude, c.longitude, c.boosted_until),
+            c,
+        )
+        for c in candidates
+    ]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [c for _score, c in scored]
+
+
 def _get_business_or_404(db: Session, business_id: str) -> Business:
     business = db.query(Business).filter(Business.id == business_id).first()
     if not business:
@@ -91,7 +128,9 @@ def list_businesses(
     category: Optional[str] = None,
     country: Optional[str] = None,
     city: Optional[str] = None,
-    sort: str = Query("rating", description="rating | new | reviews | name"),
+    sort: str = Query("recommended", description="recommended | rating | new | reviews | name"),
+    latitude: Optional[float] = Query(None, ge=-90, le=90, description="Широта пользователя (для sort=recommended)"),
+    longitude: Optional[float] = Query(None, ge=-180, le=180, description="Долгота пользователя (для sort=recommended)"),
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
@@ -119,16 +158,23 @@ def list_businesses(
     # Бустнутые Premium-заведения всегда всплывают в топ каталога на BOOST_DURATION_HOURS часов.
     boosted_rank = case((Business.boosted_until > utcnow(), 0), else_=1)
 
-    if sort == "new":
-        query = query.order_by(boosted_rank, Business.created_at.desc())
-    elif sort == "reviews":
-        query = query.order_by(boosted_rank, Business.reviews_count.desc(), Business.average_rating.desc())
-    elif sort == "name":
-        query = query.order_by(boosted_rank, Business.name.asc())
+    if sort == "recommended" and latitude is not None and longitude is not None:
+        # "Рекомендовано": ближе и с лучшим рейтингом — выше. Бустнутые всё равно
+        # в топе. Считаем расстояние в Python (без PostGIS) на ограниченном
+        # наборе кандидатов — так же, как /nearby у сходок.
+        candidates = query.order_by(boosted_rank, Business.average_rating.desc()).limit(1000).all()
+        out_items = _rank_by_recommended(candidates, latitude, longitude)
+        items = out_items[page.offset : page.offset + page.limit]
     else:
-        query = query.order_by(boosted_rank, Business.average_rating.desc(), Business.reviews_count.desc())
-
-    items = query.offset(page.offset).limit(page.limit).all()
+        if sort == "new":
+            query = query.order_by(boosted_rank, Business.created_at.desc())
+        elif sort == "reviews":
+            query = query.order_by(boosted_rank, Business.reviews_count.desc(), Business.average_rating.desc())
+        elif sort == "name":
+            query = query.order_by(boosted_rank, Business.name.asc())
+        else:
+            query = query.order_by(boosted_rank, Business.average_rating.desc(), Business.reviews_count.desc())
+        items = query.offset(page.offset).limit(page.limit).all()
 
     favorite_ids = _favorite_ids(db, current_user, [b.id for b in items])
 

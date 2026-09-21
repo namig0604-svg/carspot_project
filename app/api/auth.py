@@ -4,18 +4,23 @@
 import random
 import re
 import string
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_current_active_user
-from app.models.base import utcnow
-from app.models.user import User
+from app.email_utils import send_password_reset_code
+from app.models.base import new_id, utcnow
+from app.models.user import PasswordResetToken, User
 from app.schemas.user import (
+    ForgotPasswordRequest,
     PasswordChange,
+    ResetPasswordRequest,
     Token,
     UserLogin,
     UserMe,
@@ -175,3 +180,83 @@ def change_password(
     current_user.hashed_password = hash_password(payload.new_password)
     db.commit()
     return {"message": "Пароль изменён"}
+
+
+def _generate_reset_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+@router.post(
+    "/forgot-password",
+    summary="Запросить код восстановления пароля на email",
+)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Всегда отвечает одинаково (не выдаём, существует ли такой email — иначе
+    по ответу можно было бы проверять чужие email на регистрацию в CarSpot).
+    Если аккаунт с таким email есть — отправляем 6-значный код на почту.
+    """
+    generic_response = {
+        "message": "Если аккаунт с таким email существует, мы отправили на него код восстановления"
+    }
+
+    email = str(payload.email).strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    if not user or not user.is_active:
+        return generic_response
+
+    # Предыдущие неиспользованные коды этого пользователя больше не действуют —
+    # чтобы старое письмо нельзя было использовать после запроса нового кода.
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).update({PasswordResetToken.used_at: utcnow()}, synchronize_session=False)
+
+    code = _generate_reset_code()
+    token = PasswordResetToken(
+        id=new_id(),
+        user_id=user.id,
+        code_hash=hash_password(code),
+        expires_at=utcnow() + timedelta(minutes=settings.PASSWORD_RESET_CODE_TTL_MINUTES),
+    )
+    db.add(token)
+    db.commit()
+
+    send_password_reset_code(user.email, user.username, code)
+
+    return generic_response
+
+
+@router.post(
+    "/reset-password",
+    summary="Сбросить пароль по коду из письма",
+)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    email = str(payload.email).strip().lower()
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Неверный код или email")
+
+    candidates = (
+        db.query(PasswordResetToken)
+        .filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > utcnow(),
+        )
+        .order_by(PasswordResetToken.created_at.desc())
+        .all()
+    )
+
+    matching = next(
+        (t for t in candidates if verify_password(payload.code.strip(), t.code_hash)),
+        None,
+    )
+    if not matching:
+        raise HTTPException(status_code=400, detail="Неверный или просроченный код")
+
+    matching.used_at = utcnow()
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+
+    return {"message": "Пароль успешно изменён, теперь можно войти с новым паролем"}

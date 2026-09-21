@@ -108,3 +108,21 @@ class ProfileView(Base):
     viewer_id = Column(String(36), index=True, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class PasswordResetToken(Base):
+    """Код восстановления пароля, отправленный на email.
+
+    Храним хеш кода (bcrypt, как и пароль), а не сам код — чтобы утечка БД
+    не давала возможность восстановить чужой аккаунт. Код одноразовый и
+    короткоживущий (см. PASSWORD_RESET_CODE_TTL_MINUTES в config.py).
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, default=new_id)
+    user_id = Column(String(36), index=True, nullable=False)
+    code_hash = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False)

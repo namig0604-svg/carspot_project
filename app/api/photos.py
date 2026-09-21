@@ -117,6 +117,40 @@ async def upload_photo(
     return photo
 
 
+@router.post(
+    "/upload-file",
+    summary="Загрузить изображение и получить его URL (аватар, обложка сходки/клуба, фото машины)",
+)
+async def upload_file(
+    file: UploadFile = File(..., description="Изображение"),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    В отличие от /upload, не привязывает фото ни к событию, ни к машине и не
+    создаёт запись в галерее — просто сохраняет файл и отдаёт его URL. Им
+    затем заполняют одиночные URL-поля (User.avatar_url, Event.cover_url,
+    Club.logo_url/cover_url, Car.photo_url) при создании/редактировании —
+    то есть ровно то же место, куда раньше вручную вставляли ссылку.
+    """
+    if file.content_type and file.content_type not in settings.ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неподдерживаемый формат: {file.content_type}",
+        )
+
+    contents = await file.read()
+    if len(contents) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Файл слишком большой. Максимум {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} МБ",
+        )
+    if not contents:
+        raise HTTPException(status_code=400, detail="Файл пустой")
+
+    key = _save_file(contents, file.filename or "photo.jpg")
+    return {"url": f"/uploads/{key}"}
+
+
 def _liked_photo_ids(db: Session, user: Optional[User], photo_ids: list) -> set:
     """Id фото, которые лайкнул текущий пользователь — одним запросом (против N+1)."""
     if not user or not photo_ids:
