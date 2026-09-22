@@ -118,6 +118,7 @@ class BusinessMapMarker(BaseModel):
 class BusinessReviewCreate(BaseModel):
     rating: int = Field(..., ge=1, le=5, examples=[5])
     text: Optional[str] = Field(None, examples=["Быстро и качественно сделали развал-схождение"])
+    photo_url: Optional[str] = Field(None, examples=["/uploads/abc123.jpg"])
     quality_rating: Optional[int] = Field(None, ge=1, le=5)
     price_rating: Optional[int] = Field(None, ge=1, le=5)
     speed_rating: Optional[int] = Field(None, ge=1, le=5)
@@ -131,6 +132,7 @@ class BusinessReviewOut(BaseModel):
     user_id: str
     rating: int
     text: Optional[str] = None
+    photo_url: Optional[str] = None
     quality_rating: Optional[int] = None
     price_rating: Optional[int] = None
     speed_rating: Optional[int] = None

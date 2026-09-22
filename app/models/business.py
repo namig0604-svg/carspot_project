@@ -83,6 +83,7 @@ class BusinessReview(Base):
 
     rating = Column(Integer, nullable=False)   # 1..5
     text = Column(Text, nullable=True)
+    photo_url = Column(String(500), nullable=True)  # фото к отзыву (необязательно)
 
     quality_rating = Column(Integer, nullable=True)     # качество работы
     price_rating = Column(Integer, nullable=True)       # цена/качество
