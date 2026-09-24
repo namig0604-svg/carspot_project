@@ -3,6 +3,7 @@
 перед вызовом create_all().
 """
 from app.models.business import Business, BusinessFavorite, BusinessReview
+from app.models.booking import BusinessBooking
 from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubFavorite, ClubMember
@@ -45,6 +46,7 @@ __all__ = [
     "Business",
     "BusinessReview",
     "BusinessFavorite",
+    "BusinessBooking",
     "Report",
     "Story",
     "StoryView",

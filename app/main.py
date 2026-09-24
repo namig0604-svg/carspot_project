@@ -121,6 +121,7 @@ def health():
 from app.api import (  # noqa: E402
     admin,
     auth,
+    bookings,
     businesses,
     cars,
     chats,
@@ -145,6 +146,7 @@ app.include_router(cars.router, prefix="/api/cars", tags=["Мой Гараж"])
 app.include_router(events.router, prefix="/api/events", tags=["Сходки"])
 app.include_router(clubs.router, prefix="/api/clubs", tags=["Клубы"])
 app.include_router(businesses.router, prefix="/api/businesses", tags=["Автосервисы"])
+app.include_router(bookings.router, prefix="/api/bookings", tags=["Онлайн-запись"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
 app.include_router(comments.router, prefix="/api/comments", tags=["Комментарии"])
 app.include_router(friends.router, prefix="/api/friends", tags=["Друзья"])
