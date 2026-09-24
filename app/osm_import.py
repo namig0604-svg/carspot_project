@@ -145,6 +145,10 @@ def fetch_overpass_elements(country_iso2: str = "GE") -> list:
         settings.OVERPASS_URL,
         data={"data": query},
         timeout=settings.OVERPASS_TIMEOUT_SECONDS + 10,
+        headers={
+            "User-Agent": "CarSpotApp/1.0 (+https://github.com/namig0604-svg/carspot_project)",
+            "Accept": "application/json",
+        },
     )
     resp.raise_for_status()
     data = resp.json()
