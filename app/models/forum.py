@@ -23,7 +23,7 @@ class ForumTopic(Base):
 
     id = Column(String(36), primary_key=True, default=new_id)
     category = Column(String(20), nullable=False, index=True)
-    country = Column(String(2), nullable=True, index=True)
+    country = Column(String(50), nullable=True, index=True)
     author_id = Column(String(36), index=True, nullable=False)
     title = Column(String(200), nullable=False)
     body = Column(Text, nullable=False)

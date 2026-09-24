@@ -41,7 +41,7 @@ def list_categories(
         ForumTopic.is_active.is_(True)
     )
     if country:
-        query = query.filter(ForumTopic.country == country.upper())
+        query = query.filter(ForumTopic.country == country)
     counts = dict(query.group_by(ForumTopic.category).all())
     return [
         ForumCategoryCount(category=c, topics_count=counts.get(c, 0))
@@ -63,7 +63,7 @@ def list_topics(
             raise HTTPException(status_code=400, detail=f"category dolzhen byt odnim iz: {', '.join(FORUM_CATEGORIES)}")
         query = query.filter(ForumTopic.category == category)
     if country:
-        query = query.filter(ForumTopic.country == country.upper())
+        query = query.filter(ForumTopic.country == country)
     if search:
         like = f"%{search.strip()}%"
         query = query.filter(ForumTopic.title.ilike(like))
@@ -96,7 +96,7 @@ def create_topic(
 ):
     topic = ForumTopic(
         category=payload.category,
-        country=payload.country.upper() if payload.country else None,
+        country=payload.country,
         author_id=current_user.id,
         title=payload.title,
         body=payload.body,

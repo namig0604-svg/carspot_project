@@ -10,7 +10,7 @@ from app.schemas.user import UserPublic
 
 class ForumTopicCreate(BaseModel):
     category: str
-    country: Optional[str] = Field(None, max_length=2)
+    country: Optional[str] = Field(None, max_length=50)
     title: str = Field(..., min_length=3, max_length=200)
     body: str = Field(..., min_length=1, max_length=5000)
 
