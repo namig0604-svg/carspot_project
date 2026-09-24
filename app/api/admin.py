@@ -316,36 +316,3 @@ def geocode_business_addresses(
     )
 
     return {"processed": len(candidates), "updated": updated, "remaining": remaining}
-
-
-@router.get(
-    "/debug-geocode",
-    summary="[временно] сырой ответ Nominatim для одной точки — для диагностики",
-)
-def debug_geocode(
-    lat: float,
-    lon: float,
-    _admin: User = Depends(require_admin),
-):
-    """Временная диагностическая ручка: показывает сырой статус-код и текст
-    ответа Nominatim, чтобы понять, почему geocode-business-addresses не
-    заполняет адреса (например если Railway попадает под rate-limit/бан
-    по IP датацентра — такое бывает с публичным Nominatim)."""
-    import requests as _requests
-
-    from app.geocoding import _NOMINATIM_URL, _USER_AGENT
-
-    try:
-        resp = _requests.get(
-            _NOMINATIM_URL,
-            params={"format": "jsonv2", "lat": lat, "lon": lon, "accept-language": "ru", "zoom": 18},
-            timeout=10,
-            headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
-        )
-        return {
-            "status_code": resp.status_code,
-            "headers": dict(resp.headers),
-            "text": resp.text[:2000],
-        }
-    except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"}
