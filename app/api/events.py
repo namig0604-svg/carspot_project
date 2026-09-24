@@ -389,6 +389,53 @@ def my_favorite_events(
     return result
 
 
+@router.get(
+    "/my/created",
+    response_model=List[EventOut],
+    summary="Sozdannye mnoy shodki",
+)
+def my_created_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    events = (
+        db.query(Event)
+        .filter(Event.creator_id == current_user.id)
+        .order_by(Event.created_at.desc())
+        .all()
+    )
+    event_ids = [e.id for e in events]
+
+    favorite_ids = {
+        row[0]
+        for row in db.query(EventFavorite.event_id)
+        .filter(
+            EventFavorite.event_id.in_(event_ids),
+            EventFavorite.user_id == current_user.id,
+        )
+        .all()
+    } if event_ids else set()
+
+    joined_ids = {
+        row[0]
+        for row in db.query(EventParticipant.event_id)
+        .filter(
+            EventParticipant.event_id.in_(event_ids),
+            EventParticipant.user_id == current_user.id,
+            EventParticipant.status.in_(("going", "maybe")),
+        )
+        .all()
+    } if event_ids else set()
+
+    result = []
+    for e in events:
+        item = EventOut.model_validate(e)
+        item.is_joined = e.id in joined_ids
+        item.is_favorite = e.id in favorite_ids
+        result.append(item)
+    return result
+
+
 @router.get("/{event_id}", response_model=EventDetail, summary="Карточка сходки")
 def get_event(
     event_id: str,
