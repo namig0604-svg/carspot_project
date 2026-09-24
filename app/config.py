@@ -83,4 +83,8 @@ class Settings:
     GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
     GMAIL_SENDER_NAME: str = os.getenv("GMAIL_SENDER_NAME", "CarSpot")
     PASSWORD_RESET_CODE_TTL_MINUTES: int = _get_int("PASSWORD_RESET_CODE_TTL_MINUTES", 30)
+
+    # --- Импорт автосервисов из OpenStreetMap (Overpass API) ---
+    OVERPASS_URL: str = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
+    OVERPASS_TIMEOUT_SECONDS: int = _get_int("OVERPASS_TIMEOUT_SECONDS", 60)
 settings = Settings()

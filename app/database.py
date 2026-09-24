@@ -93,6 +93,7 @@ def _ensure_columns() -> None:
         ("businesses", "boosted_until", "TIMESTAMP"),
         ("cars", "license_plate", "VARCHAR(20)"),
         ("business_reviews", "photo_url", "VARCHAR(500)"),
+        ("businesses", "osm_id", "VARCHAR(50)"),
     ]
     try:
         with engine.connect() as conn:

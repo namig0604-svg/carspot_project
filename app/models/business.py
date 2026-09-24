@@ -34,6 +34,10 @@ class Business(Base):
 
     id = Column(String(36), primary_key=True, default=new_id)
     owner_id = Column(String(36), index=True, nullable=True)  # добавивший пользователь
+    # "node/12345" / "way/12345" — заполняется только для заведений, импортированных
+    # из OpenStreetMap (см. app/osm_import.py); используется для upsert при повторном
+    # импорте, чтобы не плодить дубликаты. У обычных (добавленных вручную) заведений — NULL.
+    osm_id = Column(String(50), nullable=True, index=True)
 
     name = Column(String(150), nullable=False, index=True)
     category = Column(String(30), default="service", nullable=False, index=True)

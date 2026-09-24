@@ -145,3 +145,13 @@ class BusinessReviewListResponse(BaseModel):
     limit: int
     offset: int
     items: List[BusinessReviewOut]
+
+
+class OsmImportResult(BaseModel):
+    """Итог импорта заведений из OpenStreetMap (см. POST /api/admin/import-osm-businesses)."""
+
+    found_in_osm: int
+    created: int
+    updated: int
+    skipped: int
+    dry_run: bool
