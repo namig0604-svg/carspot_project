@@ -94,6 +94,11 @@ def _ensure_columns() -> None:
         ("cars", "license_plate", "VARCHAR(20)"),
         ("business_reviews", "photo_url", "VARCHAR(500)"),
         ("businesses", "osm_id", "VARCHAR(50)"),
+        ("users", "share_location", "BOOLEAN DEFAULT FALSE"),
+        ("users", "location_visibility", "VARCHAR(20) DEFAULT 'everyone'"),
+        ("users", "last_lat", "DOUBLE PRECISION"),
+        ("users", "last_lng", "DOUBLE PRECISION"),
+        ("users", "location_updated_at", "TIMESTAMP"),
     ]
     try:
         with engine.connect() as conn:

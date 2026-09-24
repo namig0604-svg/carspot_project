@@ -129,6 +129,7 @@ from app.api import (  # noqa: E402
     events,
     forum,
     friends,
+    location,
     notifications,
     payments,
     photos,
@@ -148,6 +149,7 @@ app.include_router(chats.router, prefix="/api/chats", tags=["Чаты"])
 app.include_router(comments.router, prefix="/api/comments", tags=["Комментарии"])
 app.include_router(friends.router, prefix="/api/friends", tags=["Друзья"])
 app.include_router(forum.router, prefix="/api/forum", tags=["Форум"])
+app.include_router(location.router, prefix="/api/location", tags=["Геолокация"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Уведомления"])
 app.include_router(payments.router, prefix="/api/payments", tags=["Платежи"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["Рейтинги"])

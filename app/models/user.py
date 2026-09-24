@@ -67,6 +67,16 @@ class User(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     last_seen_at = Column(DateTime, default=utcnow, nullable=True)
+
+    # --- Live-геолокация на карте ---
+    # share_location: пользователь сейчас транслирует свою позицию.
+    # location_visibility: кому видна метка — "everyone" / "friends" / "club".
+    share_location = Column(Boolean, default=False, nullable=False)
+    location_visibility = Column(String(20), default="everyone", nullable=False)
+    last_lat = Column(Float, nullable=True)
+    last_lng = Column(Float, nullable=True)
+    location_updated_at = Column(DateTime, nullable=True)
+
     @property
     def is_online(self) -> bool:
         """Онлайн = делал авторизованный запрос за последние ONLINE_THRESHOLD_MINUTES."""
