@@ -2,6 +2,7 @@
 Админка: рассмотрение жалоб, блокировка пользователей.
 Доступ — только пользователям с is_admin=True (см. app.deps.require_admin).
 """
+import time
 from typing import List, Optional
 
 import requests
@@ -15,6 +16,7 @@ from app.models.base import utcnow
 from app.models.business import Business
 from app.models.report import REPORT_STATUSES, REPORT_TARGET_TYPES, Report
 from app.models.user import User
+from app.geocoding import reverse_geocode_address
 from app.osm_import import element_to_business_fields, fetch_overpass_elements
 from app.schemas.business import OsmImportResult
 from app.schemas.report import (
@@ -258,3 +260,59 @@ def import_osm_businesses(
         skipped=skipped,
         dry_run=dry_run,
     )
+
+
+@router.post(
+    "/geocode-business-addresses",
+    summary="Заполнить точный адрес заведений через обратное геокодирование (Nominatim)",
+)
+def geocode_business_addresses(
+    limit: int = Query(
+        50,
+        ge=1,
+        le=200,
+        description="Сколько заведений без адреса обработать за один вызов (Nominatim — не более 1 запроса/сек, поэтому большой limit — долгий вызов)",
+    ),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """
+    У части заведений (в первую очередь импортированных из OSM — см.
+    /api/admin/import-osm-businesses) нет тегов адреса в исходных данных,
+    поэтому поле address пустое. Эта ручка берёт до `limit` таких заведений
+    (address IS NULL, но координаты есть) и заполняет адрес через обратное
+    геокодирование по координатам (Nominatim, тот же источник, что и OSM).
+
+    Вызывать можно многократно с небольшим limit, пока remaining не станет 0 —
+    каждый вызов обрабатывает свою порцию, ничего не дублирует.
+    """
+    candidates = (
+        db.query(Business)
+        .filter(Business.address.is_(None))
+        .filter(Business.latitude.isnot(None))
+        .filter(Business.longitude.isnot(None))
+        .order_by(Business.created_at)
+        .limit(limit)
+        .all()
+    )
+
+    updated = 0
+    for i, business in enumerate(candidates):
+        if i > 0:
+            time.sleep(1.1)  # политика Nominatim: не более 1 запроса в секунду
+        address = reverse_geocode_address(business.latitude, business.longitude)
+        if address:
+            business.address = address
+            updated += 1
+
+    db.commit()
+
+    remaining = (
+        db.query(Business)
+        .filter(Business.address.is_(None))
+        .filter(Business.latitude.isnot(None))
+        .filter(Business.longitude.isnot(None))
+        .count()
+    )
+
+    return {"processed": len(candidates), "updated": updated, "remaining": remaining}
