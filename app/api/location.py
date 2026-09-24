@@ -134,6 +134,37 @@ def get_settings(current_user: User = Depends(get_current_active_user)):
     )
 
 
+class LocationUpdateIn(BaseModel):
+    lat: float
+    lng: float
+
+
+@router.post(
+    "/update",
+    response_model=LocationPeerOut,
+    summary="Обновить свою позицию (REST-пуллинг, без WebSocket)",
+)
+def update_position(
+    payload: LocationUpdateIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Клиент шлёт сюда свою позицию раз в несколько секунд, пока включена
+    трансляция — так же, как чат обновляется таймером, а не WebSocket'ом
+    (см. app/ws_manager.py — WS для чатов и для /api/location/ws всё ещё
+    доступен и используется тем клиентом, который захочет реального
+    времени, но мобильный/веб-клиент CarSpot сейчас работает пуллингом).
+    """
+    current_user.last_lat = payload.lat
+    current_user.last_lng = payload.lng
+    current_user.location_updated_at = utcnow()
+    if not current_user.share_location:
+        current_user.share_location = True
+    db.commit()
+    return _peer_out(current_user)
+
+
 @router.get(
     "/nearby",
     response_model=List[LocationPeerOut],
