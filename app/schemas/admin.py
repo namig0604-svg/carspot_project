@@ -27,3 +27,14 @@ class AdminRankOut(BaseModel):
     id: str
     username: str
     admin_rank: Optional[str] = None
+
+
+class AdminGrantPremiumRequest(BaseModel):
+    days: int = Field(..., gt=0, le=3650)
+    tier: str = Field("pro", description="basic | pro")
+
+
+class AdminGrantPremiumOut(BaseModel):
+    user_id: str
+    premium_until: Optional[str] = None
+    premium_tier: Optional[str] = None

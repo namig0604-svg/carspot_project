@@ -219,10 +219,18 @@ def recalc_business_rating(db: Session, business_id: str) -> None:
 
 # ─────────────────────── CARSPOT PREMIUM ───────────────────────
 
-def extend_premium(user: User, days: int) -> None:
-    """Продлевает Premium на `days` от текущего срока (или от сейчас, если уже истёк)."""
+def extend_premium(user: User, days: int, tier: Optional[str] = None) -> None:
+    """
+    Продлевает Premium на `days` от текущего срока (или от сейчас, если уже
+    истёк). `tier` передают только настоящие покупки конкретного плана
+    ("basic"/"pro") — тогда он становится текущим активным уровнем.
+    Пробный период и награда за рефералов вызывают это без tier и не
+    трогают уже купленный уровень (см. app/premium_tiers.py).
+    """
     base = user.premium_until if user.premium_until and user.premium_until > utcnow() else utcnow()
     user.premium_until = base + timedelta(days=days)
+    if tier:
+        user.premium_tier = tier
 
 
 def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) -> None:

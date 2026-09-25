@@ -22,6 +22,7 @@ from fastapi import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
@@ -268,10 +269,10 @@ def toggle_feature(
         raise HTTPException(status_code=404, detail="Фото не найдено")
     if photo.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Это не ваше фото")
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.can_pin_photo(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="Закреплять фото сверху галереи могут только подписчики CarSpot Premium",
+            detail="Закреплять фото сверху галереи могут только подписчики CarSpot Pro",
         )
 
     photo.is_featured = not photo.is_featured

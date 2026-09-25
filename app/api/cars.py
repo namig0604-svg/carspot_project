@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.config import settings
 from app.database import get_db
 from app.models.car import Car, CarLike
@@ -64,7 +65,7 @@ def create_car(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    max_cars = settings.PREMIUM_MAX_CARS_PER_USER if current_user.is_premium else settings.MAX_CARS_PER_USER
+    max_cars = premium_tiers.car_limit(current_user)
     existing_count = db.query(Car).filter(Car.user_id == current_user.id).count()
     if existing_count >= max_cars:
         detail = f"Максимум {max_cars} машин в гараже"
@@ -164,7 +165,7 @@ def car_likers(
         raise HTTPException(status_code=404, detail="Машина не найдена")
     if car.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Это не ваша машина")
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.can_view_insights(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
             detail="Список тех, кто лайкнул машину, доступен только с CarSpot Premium",
@@ -175,7 +176,7 @@ def car_likers(
         for row in db.query(CarLike.user_id)
         .filter(CarLike.car_id == car_id)
         .order_by(CarLike.created_at.desc())
-        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .limit(premium_tiers.insights_limit(current_user) if not current_user.is_admin else settings.PREMIUM_INSIGHTS_LIMIT)
         .all()
     ]
     if not liker_ids:

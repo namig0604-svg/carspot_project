@@ -8,6 +8,7 @@ from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.config import settings
 from app.api.events import _can_view_private_event
 from app.database import get_db
@@ -148,7 +149,7 @@ def my_likers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.can_view_insights(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
             detail="Список тех, кто лайкнул профиль, доступен только с CarSpot Premium",
@@ -159,7 +160,7 @@ def my_likers(
         for row in db.query(UserLike.liker_user_id)
         .filter(UserLike.target_user_id == current_user.id)
         .order_by(UserLike.created_at.desc())
-        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .limit(premium_tiers.insights_limit(current_user) if not current_user.is_admin else settings.PREMIUM_INSIGHTS_LIMIT)
         .all()
     ]
     if not liker_ids:
@@ -178,7 +179,7 @@ def my_profile_views(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.can_view_insights(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
             detail="Список просмотров профиля доступен только с CarSpot Premium",
@@ -188,7 +189,7 @@ def my_profile_views(
         db.query(ProfileView)
         .filter(ProfileView.viewed_user_id == current_user.id)
         .order_by(ProfileView.updated_at.desc())
-        .limit(settings.PREMIUM_INSIGHTS_LIMIT)
+        .limit(premium_tiers.insights_limit(current_user) if not current_user.is_admin else settings.PREMIUM_INSIGHTS_LIMIT)
         .all()
     )
     if not rows:

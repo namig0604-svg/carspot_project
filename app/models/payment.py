@@ -14,6 +14,7 @@ class PremiumPayment(Base):
     user_id = Column(String(36), index=True, nullable=False)
 
     plan = Column(String(20), nullable=False)          # "month" / "year"
+    tier = Column(String(10), nullable=False, default="pro")  # "basic" / "pro"
     amount_usd = Column(Float, nullable=False)
     days = Column(Integer, nullable=False)
 

@@ -14,6 +14,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
@@ -182,6 +183,7 @@ def get_profile_status(current_user: User = Depends(get_current_active_user)):
         xp_boost_grant_amount=settings.XP_BOOST_GRANT_AMOUNT,
         profile_boosted_until=current_user.profile_boosted_until,
         profile_boost_cost=settings.COIN_COST_PROFILE_BOOST,
+        profile_boost_is_free=premium_tiers.gets_free_boost(current_user),
         boost_duration_hours=settings.BOOST_DURATION_HOURS,
     )
 
@@ -302,10 +304,13 @@ def boost_profile(
             detail=f"Буст профиля уже активен до {current_user.profile_boosted_until.isoformat()}",
         )
 
-    try:
-        spend_coins(db, current_user, settings.COIN_COST_PROFILE_BOOST, "boost_profile")
-    except InsufficientCoinsError as e:
-        raise HTTPException(status_code=402, detail=str(e))
+    # CarSpot Pro поднимает профиль в поиске бесплатно (как сходки и
+    # автосервисы) — остальные платят монетами.
+    if not premium_tiers.gets_free_boost(current_user):
+        try:
+            spend_coins(db, current_user, settings.COIN_COST_PROFILE_BOOST, "boost_profile")
+        except InsufficientCoinsError as e:
+            raise HTTPException(status_code=402, detail=str(e))
 
     current_user.profile_boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
     db.commit()

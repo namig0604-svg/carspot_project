@@ -48,7 +48,7 @@ class ResetPasswordRequest(BaseModel):
 class UserPublic(BaseModel):
     """Профиль, видимый другим пользователям."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str
     username: str
@@ -61,6 +61,10 @@ class UserPublic(BaseModel):
     is_verified: bool = False
     is_admin: bool = False
     is_premium: bool = False
+    # "basic" | "pro" | None — уровень активного Premium (эффективный, не
+    # сырая колонка: пробный период/рефералы без явного tier читаются как
+    # "pro"). См. User.effective_premium_tier в app/models/user.py.
+    premium_tier: Optional[str] = Field(None, validation_alias="effective_premium_tier")
     is_online: bool = False
     average_rating: float = 0.0
     ratings_count: int = 0

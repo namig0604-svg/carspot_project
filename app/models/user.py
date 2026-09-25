@@ -52,6 +52,9 @@ class User(Base):
     # пробным периодом (once) и реферальной программой (см. services.py).
     premium_until = Column(DateTime, nullable=True)
     premium_trial_used = Column(Boolean, default=False, nullable=False)
+    # "basic" | "pro" | None. Трогают только настоящие покупки (не пробный
+    # период и не награда за рефералов) — см. app/premium_tiers.py.
+    premium_tier = Column(String(10), nullable=True)
     referral_premium_claimed_count = Column(Integer, default=0, nullable=False)
 
     # --- Статистика (денормализована для скорости) ---
@@ -106,6 +109,18 @@ class User(Base):
     def is_premium(self) -> bool:
         """Premium активен = premium_until в будущем (пробный период или награда за рефералов)."""
         return bool(self.premium_until and self.premium_until > utcnow())
+
+    @property
+    def effective_premium_tier(self) -> str | None:
+        """
+        'basic' | 'pro' | None — уровень активного Premium. Пробный период
+        и награда за рефералов не трогают premium_tier, поэтому если явно
+        купленного плана нет, по умолчанию считаем Pro (щедрее для тех, у
+        кого Premium появился раньше, чем ввели уровни). См. app/premium_tiers.py.
+        """
+        if not self.is_premium:
+            return None
+        return self.premium_tier or "pro"
 
 
 class UserLike(Base):

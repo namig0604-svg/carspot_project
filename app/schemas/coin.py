@@ -70,4 +70,5 @@ class ProfileStatusOut(BaseModel):
     xp_boost_grant_amount: int
     profile_boosted_until: Optional[datetime] = None
     profile_boost_cost: int
+    profile_boost_is_free: bool = False  # true для CarSpot Pro
     boost_duration_hours: int

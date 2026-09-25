@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.api.clubs import refresh_events_count
 from app.config import settings
 from app.database import get_db
@@ -529,10 +530,10 @@ def boost_event(
         raise HTTPException(status_code=404, detail="Событие не найдено")
     if event.creator_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Только создатель может продвигать сходку")
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.gets_free_boost(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="Поднимать сходки в топ ленты могут только подписчики CarSpot Premium",
+            detail="Бесплатно поднимать сходки в топ ленты могут только подписчики CarSpot Pro",
         )
 
     now = utcnow()

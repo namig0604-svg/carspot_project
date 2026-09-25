@@ -22,6 +22,8 @@ from app.osm_import import element_to_business_fields, fetch_overpass_elements
 from app.schemas.admin import (
     AdminGrantCoinsOut,
     AdminGrantCoinsRequest,
+    AdminGrantPremiumOut,
+    AdminGrantPremiumRequest,
     AdminRankOut,
     AdminSetRankRequest,
 )
@@ -33,7 +35,7 @@ from app.schemas.report import (
     UserBanPayload,
 )
 from app.schemas.user import UserAdminOut, UserPublic
-from app.services import grant_coins, users_by_ids
+from app.services import extend_premium, grant_coins, users_by_ids
 
 router = APIRouter()
 
@@ -395,3 +397,31 @@ def admin_grant_coins(
     db.commit()
     db.refresh(user)
     return AdminGrantCoinsOut(user_id=user.id, balance=user.coin_balance or 0, granted=payload.amount)
+
+
+@router.post(
+    "/premium/grant/{user_id}",
+    response_model=AdminGrantPremiumOut,
+    summary="Выдать CarSpot Premium (Basic/Pro) пользователю вручную — только разработчик и тех.администратор",
+)
+def admin_grant_premium(
+    user_id: str,
+    payload: AdminGrantPremiumRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_rank(RANK_TECH_ADMIN)),
+):
+    if payload.tier not in ("basic", "pro"):
+        raise HTTPException(status_code=400, detail="tier должен быть basic или pro")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    extend_premium(user, payload.days, tier=payload.tier)
+    db.commit()
+    db.refresh(user)
+    return AdminGrantPremiumOut(
+        user_id=user.id,
+        premium_until=user.premium_until.isoformat() if user.premium_until else None,
+        premium_tier=user.effective_premium_tier,
+    )

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app import premium_tiers
 from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
@@ -106,11 +107,20 @@ def create_business(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.can_create_business(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
             detail="Добавлять автосервисы и ателье могут только подписчики CarSpot Premium",
         )
+
+    if not current_user.is_admin:
+        max_businesses = premium_tiers.max_businesses(current_user)
+        existing_count = db.query(Business).filter(Business.owner_id == current_user.id).count()
+        if existing_count >= max_businesses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"На вашем уровне Premium можно добавить максимум {max_businesses} заведений",
+            )
 
     business = Business(owner_id=current_user.id, **payload.model_dump())
     db.add(business)
@@ -371,10 +381,10 @@ def boost_business(
 ):
     business = _get_business_or_404(db, business_id)
     _require_owner(business, current_user)
-    if not current_user.is_premium and not current_user.is_admin:
+    if not premium_tiers.gets_free_boost(current_user) and not current_user.is_admin:
         raise HTTPException(
             status_code=403,
-            detail="Поднимать заведение в топ каталога могут только подписчики CarSpot Premium",
+            detail="Бесплатно поднимать заведение в топ каталога могут только подписчики CarSpot Pro",
         )
 
     now = utcnow()

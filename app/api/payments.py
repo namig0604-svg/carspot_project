@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import get_current_active_user
+from app.deps import Pagination, get_current_active_user
 from app.models.base import new_id, utcnow
 from app.models.payment import PremiumPayment
 from app.models.user import User
@@ -26,19 +26,45 @@ from app.google_play_client import (
 router = APIRouter()
 
 PREMIUM_PLANS = {
-    "month": {
-        "title": "Premium на месяц",
+    # Pro — те же id/цены/товары Google Play, что были у единственного
+    # плана Premium раньше, чтобы не ломать уже оформленные подписки.
+    "pro_month": {
+        "title": "CarSpot Pro на месяц",
+        "tier": "pro",
         "days": 30,
         "amount_usd": 4.99,
         "google_play_product_id": "carspot_premium_month",
     },
-    "year": {
-        "title": "Premium на год",
+    "pro_year": {
+        "title": "CarSpot Pro на год",
+        "tier": "pro",
         "days": 365,
         "amount_usd": 39.99,
         "google_play_product_id": "carspot_premium_year",
     },
+    "basic_month": {
+        "title": "CarSpot Basic на месяц",
+        "tier": "basic",
+        "days": 30,
+        "amount_usd": 2.49,
+        "google_play_product_id": "carspot_basic_month",
+    },
+    "basic_year": {
+        "title": "CarSpot Basic на год",
+        "tier": "basic",
+        "days": 365,
+        "amount_usd": 19.99,
+        "google_play_product_id": "carspot_basic_year",
+    },
 }
+
+# Старые id плана ("month"/"year") принимаем как алиасы Pro — чтобы уже
+# опубликованные версии приложения, которые ещё шлют старые id, не сломались.
+_LEGACY_PLAN_ALIASES = {"month": "pro_month", "year": "pro_year"}
+
+
+def _resolve_plan_id(plan_id: str) -> str:
+    return _LEGACY_PLAN_ALIASES.get(plan_id, plan_id)
 
 # product_id в Play Console -> наш внутренний id плана. Строим один раз,
 # используем чтобы не доверять клиенту, какой именно план он "купил" —
@@ -48,10 +74,16 @@ _GOOGLE_PLAY_PRODUCT_TO_PLAN = {
 }
 
 
-@router.get("/plans", response_model=List[PremiumPlanOut], summary="Доступные планы Premium")
+@router.get("/plans", response_model=List[PremiumPlanOut], summary="Доступные планы Premium (Basic и Pro)")
 def list_plans():
     return [
-        PremiumPlanOut(id=plan_id, title=data["title"], days=data["days"], amount_usd=data["amount_usd"])
+        PremiumPlanOut(
+            id=plan_id,
+            title=data["title"],
+            tier=data["tier"],
+            days=data["days"],
+            amount_usd=data["amount_usd"],
+        )
         for plan_id, data in PREMIUM_PLANS.items()
     ]
 
@@ -62,14 +94,16 @@ def checkout(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    plan = PREMIUM_PLANS.get(payload.plan)
+    plan_id = _resolve_plan_id(payload.plan)
+    plan = PREMIUM_PLANS.get(plan_id)
     if not plan:
         raise HTTPException(status_code=400, detail=f"Неизвестный план: {payload.plan}")
 
     order_id = new_id()
     payment = PremiumPayment(
         user_id=current_user.id,
-        plan=payload.plan,
+        plan=plan_id,
+        tier=plan["tier"],
         amount_usd=plan["amount_usd"],
         days=plan["days"],
         order_id=order_id,
@@ -99,6 +133,23 @@ def checkout(
         status=payment.status,
         amount_usd=payment.amount_usd,
         plan=payment.plan,
+        tier=payment.tier,
+    )
+
+
+@router.get("/history", response_model=List[PaymentStatusOut], summary="История платежей Premium текущего пользователя")
+def payment_history(
+    page: Pagination = Depends(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    return (
+        db.query(PremiumPayment)
+        .filter(PremiumPayment.user_id == current_user.id)
+        .order_by(PremiumPayment.created_at.desc())
+        .offset(page.offset)
+        .limit(page.limit)
+        .all()
     )
 
 
@@ -150,7 +201,7 @@ async def trybit_webhook(request: Request, db: Session = Depends(get_db)):
 
         user = db.query(User).filter(User.id == payment.user_id).first()
         if user:
-            extend_premium(user, payment.days)
+            extend_premium(user, payment.days, tier=payment.tier)
 
         db.commit()
 
@@ -193,6 +244,7 @@ def verify_google_play_purchase(
     payment = PremiumPayment(
         user_id=current_user.id,
         plan=plan_id,
+        tier=plan["tier"],
         amount_usd=plan["amount_usd"],
         days=plan["days"],
         order_id=new_id(),
@@ -207,10 +259,11 @@ def verify_google_play_purchase(
     # Google Play сам управляет сроком подписки (продления, отмены) — он
     # источник правды по дате окончания, поэтому выставляем premium_until
     # ровно по присланному expiry, а не просто приплюсовываем дни плана.
+    current_user.premium_tier = plan["tier"]
     if result["expiry"]:
         current_user.premium_until = result["expiry"].replace(tzinfo=None)
     else:
-        extend_premium(current_user, plan["days"])
+        extend_premium(current_user, plan["days"], tier=plan["tier"])
 
     db.commit()
     db.refresh(payment)

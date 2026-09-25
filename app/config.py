@@ -50,16 +50,25 @@ class Settings:
     DEFAULT_SEARCH_RADIUS_KM: float = float(os.getenv("DEFAULT_SEARCH_RADIUS_KM", "50"))
 
     # --- CarSpot Premium ---
+    # Два уровня: Basic (дешевле, часть плюшек) и Pro (все плюшки, текущая
+    # цена и лимиты — так существующие подписчики ничего не теряют).
     # Больше машин в гараже, закреплённые фото, добавление автосервисов.
-    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 25)
+    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 25)  # Pro
+    PREMIUM_BASIC_MAX_CARS_PER_USER: int = _get_int("PREMIUM_BASIC_MAX_CARS_PER_USER", 15)
     PREMIUM_TRIAL_DAYS: int = _get_int("PREMIUM_TRIAL_DAYS", 14)
     # За каждые REFERRALS_PER_PREMIUM_MONTH приглашённых друзей — PREMIUM_MONTH_DAYS Premium.
     REFERRALS_PER_PREMIUM_MONTH: int = _get_int("REFERRALS_PER_PREMIUM_MONTH", 10)
     PREMIUM_MONTH_DAYS: int = _get_int("PREMIUM_MONTH_DAYS", 30)
-    # На сколько часов "буст" поднимает сходку/автосервис в топ ленты и каталога.
+    # На сколько часов "буст" поднимает сходку/автосервис/профиль в топ. Для
+    # Pro бесплатно (см. app/premium_tiers.py::gets_free_boost), остальные
+    # платят монетами.
     BOOST_DURATION_HOURS: int = _get_int("BOOST_DURATION_HOURS", 24)
     # Сколько строк отдаём в списках "кто лайкнул" / "кто смотрел профиль".
-    PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 50)
+    PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 50)  # Pro
+    PREMIUM_BASIC_INSIGHTS_LIMIT: int = _get_int("PREMIUM_BASIC_INSIGHTS_LIMIT", 15)
+    # Сколько автосервисов/ателье может добавить один владелец.
+    PREMIUM_PRO_MAX_BUSINESSES: int = _get_int("PREMIUM_PRO_MAX_BUSINESSES", 5)
+    PREMIUM_BASIC_MAX_BUSINESSES: int = _get_int("PREMIUM_BASIC_MAX_BUSINESSES", 1)
 
     # --- Trybit (крипто-эквайринг для оплаты Premium, работает в СНГ) ---
     TRYBIT_SHOP_ID: str = os.getenv("TRYBIT_SHOP_ID", "")

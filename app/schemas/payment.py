@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class PremiumPlanOut(BaseModel):
     id: str
     title: str
+    tier: str  # "basic" | "pro"
     days: int
     amount_usd: float
 
@@ -27,6 +28,7 @@ class CheckoutOut(BaseModel):
     status: str
     amount_usd: float
     plan: str
+    tier: str
 
 
 class PaymentStatusOut(BaseModel):
@@ -34,8 +36,10 @@ class PaymentStatusOut(BaseModel):
 
     id: str
     plan: str
+    tier: str = "pro"
     amount_usd: float
     days: int
     status: str
+    provider: str = "trybit"
     created_at: datetime
     paid_at: Optional[datetime] = None
