@@ -83,6 +83,7 @@ class UserMe(UserPublic):
     premium_until: Optional[datetime] = None
     premium_trial_used: bool = False
     profile_views_count: int = 0
+    coin_balance: int = 0
 
 
 class UserAdminOut(UserPublic):
