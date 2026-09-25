@@ -64,11 +64,16 @@ class ClubMemberOut(BaseModel):
     role: str
     status: str
     joined_at: datetime
+    custom_title: Optional[str] = None
     user: Optional[UserPublic] = None
 
 
 class ClubRoleUpdate(BaseModel):
-    role: str = Field(..., examples=["admin"])
+    role: str = Field(..., examples=["admin"], description="owner | admin | moderator | member")
+
+
+class ClubMemberTitleUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=40, description="Кастомное звание участника, например \"Ветеран\". null — снять")
 
 
 class ClubListResponse(BaseModel):

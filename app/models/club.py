@@ -11,7 +11,12 @@ from sqlalchemy import (
 from app.database import Base
 from app.models.base import new_id, utcnow
 
-CLUB_ROLES = ("owner", "admin", "member")
+CLUB_ROLES = ("owner", "admin", "moderator", "member")
+
+# Порядок прав ролей клуба (больше — выше), по аналогии с рангами администрации
+# приложения (app/ranks.py) — но это две независимые системы: роль в клубе
+# не даёт никаких глобальных прав приложения, и наоборот.
+CLUB_ROLE_ORDER = {"member": 0, "moderator": 1, "admin": 2, "owner": 3}
 
 
 class Club(Base):
@@ -54,9 +59,13 @@ class ClubMember(Base):
     id = Column(String(36), primary_key=True, default=new_id)
     club_id = Column(String(36), index=True, nullable=False)
     user_id = Column(String(36), index=True, nullable=False)
-    role = Column(String(20), default="member", nullable=False)   # owner / admin / member
+    role = Column(String(20), default="member", nullable=False)   # owner / admin / moderator / member
     status = Column(String(20), default="approved", nullable=False)  # approved / pending
     joined_at = Column(DateTime, default=utcnow, nullable=False)
+    # Кастомное отображаемое звание, которое владелец/админ клуба может
+    # присвоить участнику (например "Ветеран", "Организатор встреч").
+    # Это просто бейдж/метка — прав доступа не меняет.
+    custom_title = Column(String(40), nullable=True)
 
 
 class ClubFavorite(Base):

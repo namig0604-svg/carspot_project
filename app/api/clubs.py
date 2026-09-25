@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
-from app.models.club import Club, ClubFavorite, ClubMember
+from app.models.club import CLUB_ROLE_ORDER, Club, ClubFavorite, ClubMember
 from app.models.event import Event
 from app.models.rating import EventRating
 from app.models.user import User
@@ -21,6 +21,7 @@ from app.schemas.club import (
     ClubListResponse,
     ClubMemberOut,
     ClubOut,
+    ClubMemberTitleUpdate,
     ClubRoleUpdate,
     ClubUpdate,
 )
@@ -55,6 +56,19 @@ def _get_membership(db: Session, club_id: str, user_id: str) -> Optional[ClubMem
 def _require_admin(db: Session, club: Club, user: User) -> ClubMember:
     membership = _get_membership(db, club.id, user.id)
     if not membership or membership.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Недостаточно прав в клубе")
+    return membership
+
+
+def _require_staff(db: Session, club: Club, user: User) -> ClubMember:
+    """
+    owner / admin / moderator — базовый уровень для модерации участников
+    (одобрение заявок, исключение рядовых участников). Более серьёзные
+    действия (настройки клуба, смена ролей) по-прежнему требуют
+    _require_admin.
+    """
+    membership = _get_membership(db, club.id, user.id)
+    if not membership or membership.role not in ("owner", "admin", "moderator"):
         raise HTTPException(status_code=403, detail="Недостаточно прав в клубе")
     return membership
 
@@ -508,7 +522,7 @@ def approve_member(
     current_user: User = Depends(get_current_active_user),
 ):
     club = _get_club_or_404(db, club_id)
-    _require_admin(db, club, current_user)
+    _require_staff(db, club, current_user)
 
     membership = _get_membership(db, club_id, user_id)
     if not membership:
@@ -533,16 +547,23 @@ def change_role(
     current_user: User = Depends(get_current_active_user),
 ):
     club = _get_club_or_404(db, club_id)
+    actor_membership = _require_admin(db, club, current_user)
 
-    if club.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Только владелец может менять роли")
+    if payload.role not in ("owner", "admin", "moderator", "member"):
+        raise HTTPException(status_code=400, detail="Роль должна быть owner, admin, moderator или member")
 
-    if payload.role not in ("admin", "member", "owner"):
-        raise HTTPException(status_code=400, detail="Роль должна быть owner, admin или member")
+    if payload.role == "owner" and club.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только владелец может передать владение клубом")
 
     membership = _get_membership(db, club_id, user_id)
     if not membership:
         raise HTTPException(status_code=404, detail="Участник не найден")
+
+    # Админ (не владелец) не может назначать/снимать других админов и не
+    # может трогать владельца — это ограничено уровнем владельца.
+    if club.owner_id != current_user.id:
+        if membership.role in ("owner", "admin") or payload.role in ("owner", "admin"):
+            raise HTTPException(status_code=403, detail="Назначать администраторов может только владелец клуба")
 
     # Передача владения
     if payload.role == "owner":
@@ -556,6 +577,36 @@ def change_role(
     return {"message": "Роль обновлена", "user_id": user_id, "role": payload.role}
 
 
+@router.patch(
+    "/{club_id}/members/{user_id}/title",
+    summary="Назначить (или снять) кастомное звание участника",
+)
+def set_member_title(
+    club_id: str,
+    user_id: str,
+    payload: ClubMemberTitleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Произвольное отображаемое звание вроде "Ветеран" или "Организатор
+    встреч" — чисто косметический бейдж рядом с именем участника в списке
+    клуба, никак не влияет на права. Назначать может владелец или админ
+    клуба (тот же уровень, что и смена роли).
+    """
+    club = _get_club_or_404(db, club_id)
+    _require_admin(db, club, current_user)
+
+    membership = _get_membership(db, club_id, user_id)
+    if not membership:
+        raise HTTPException(status_code=404, detail="Участник не найден")
+
+    title = payload.title.strip() if payload.title else None
+    membership.custom_title = title or None
+    db.commit()
+    return {"message": "Звание обновлено", "user_id": user_id, "custom_title": membership.custom_title}
+
+
 @router.delete("/{club_id}/members/{user_id}", summary="Исключить участника")
 def kick_member(
     club_id: str,
@@ -564,7 +615,7 @@ def kick_member(
     current_user: User = Depends(get_current_active_user),
 ):
     club = _get_club_or_404(db, club_id)
-    _require_admin(db, club, current_user)
+    actor_membership = _require_staff(db, club, current_user)
 
     if user_id == club.owner_id:
         raise HTTPException(status_code=400, detail="Нельзя исключить владельца")
@@ -572,6 +623,11 @@ def kick_member(
     membership = _get_membership(db, club_id, user_id)
     if not membership:
         raise HTTPException(status_code=404, detail="Участник не найден")
+
+    # Модератор может исключать только рядовых участников — не других
+    # модераторов, админов или владельца.
+    if actor_membership.role == "moderator" and membership.role != "member":
+        raise HTTPException(status_code=403, detail="Модератор может исключать только рядовых участников")
 
     db.delete(membership)
     db.flush()
