@@ -87,4 +87,11 @@ class Settings:
     # --- Импорт автосервисов из OpenStreetMap (Overpass API) ---
     OVERPASS_URL: str = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
     OVERPASS_TIMEOUT_SECONDS: int = _get_int("OVERPASS_TIMEOUT_SECONDS", 60)
+
+    # --- Защита /docs и /redoc (Swagger/ReDoc) паролем ---
+    # По умолчанию стоят значения ниже — поменяйте их в Railway
+    # (переменные DOCS_USERNAME / DOCS_PASSWORD), иначе документация API
+    # защищена, по сути, общеизвестным паролем.
+    DOCS_USERNAME: str = os.getenv("DOCS_USERNAME", "carspot")
+    DOCS_PASSWORD: str = os.getenv("DOCS_PASSWORD", "change-me-in-railway")
 settings = Settings()

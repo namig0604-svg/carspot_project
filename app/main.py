@@ -7,11 +7,15 @@ CarSpot API — приложение для автомобильных сход�
 Документация: /docs
 """
 import os
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -62,8 +66,12 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description=DESCRIPTION,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # /docs, /redoc и /openapi.json отключены здесь и объявлены заново ниже
+    # за паролем (Basic Auth) — иначе полная карта всех эндпойнтов API
+    # видна в интернете вообще без авторизации.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(
@@ -73,6 +81,42 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_docs_security = HTTPBasic()
+
+
+def _require_docs_auth(credentials: HTTPBasicCredentials = Depends(_docs_security)) -> None:
+    """Basic Auth для /docs, /redoc и /openapi.json (см. DOCS_USERNAME/DOCS_PASSWORD в config.py)."""
+    correct_username = secrets.compare_digest(credentials.username, settings.DOCS_USERNAME)
+    correct_password = secrets.compare_digest(credentials.password, settings.DOCS_PASSWORD)
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный логин или пароль",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def get_open_api_endpoint(_: None = Depends(_require_docs_auth)):
+    return JSONResponse(
+        get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+        )
+    )
+
+
+@app.get("/docs", include_in_schema=False)
+async def get_swagger_docs(_: None = Depends(_require_docs_auth)):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.APP_NAME} — Docs")
+
+
+@app.get("/redoc", include_in_schema=False)
+async def get_redoc_docs(_: None = Depends(_require_docs_auth)):
+    return get_redoc_html(openapi_url="/openapi.json", title=f"{settings.APP_NAME} — ReDoc")
 
 # Раздача загруженных фото (папку создаём заранее, иначе StaticFiles упадёт)
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
