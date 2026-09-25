@@ -58,18 +58,39 @@ _COIN_PACKAGES_BY_ID = {p["product_id"]: p for p in COIN_PACKAGES}
 # Рендерится на фронтенде чисто средствами Flutter (без картинок-ассетов) —
 # id здесь совпадает с тем, что ожидает фронтенд для выбора цвета/иконки.
 COSMETICS_CATALOG = [
+    # --- Рамки аватара ---
     {"id": "frame_bronze", "type": "frame", "title": "Бронзовая рамка", "cost": 100},
     {"id": "frame_silver", "type": "frame", "title": "Серебряная рамка", "cost": 250},
     {"id": "frame_gold", "type": "frame", "title": "Золотая рамка", "cost": 500},
     {"id": "frame_neon", "type": "frame", "title": "Неоновая рамка", "cost": 800},
+    {"id": "frame_emerald", "type": "frame", "title": "Изумрудная рамка", "cost": 350},
+    {"id": "frame_sapphire", "type": "frame", "title": "Сапфировая рамка", "cost": 350},
+    {"id": "frame_ruby", "type": "frame", "title": "Рубиновая рамка", "cost": 350},
+    {"id": "frame_carbon", "type": "frame", "title": "Карбоновая рамка", "cost": 300},
+    {"id": "frame_chrome", "type": "frame", "title": "Хромовая рамка", "cost": 300},
+    {"id": "frame_diamond", "type": "frame", "title": "Алмазная рамка", "cost": 1200},
+    # --- Значки ---
     {"id": "badge_wrench", "type": "badge", "title": "Механик", "cost": 150},
     {"id": "badge_flame", "type": "badge", "title": "Огонь", "cost": 150},
     {"id": "badge_star", "type": "badge", "title": "Звезда", "cost": 300},
     {"id": "badge_crown", "type": "badge", "title": "Корона", "cost": 400},
+    {"id": "badge_bolt", "type": "badge", "title": "Молния", "cost": 150},
+    {"id": "badge_heart", "type": "badge", "title": "Любимец", "cost": 150},
+    {"id": "badge_trophy", "type": "badge", "title": "Чемпион", "cost": 350},
+    {"id": "badge_target", "type": "badge", "title": "Снайпер", "cost": 200},
+    {"id": "badge_rocket", "type": "badge", "title": "Ракета", "cost": 250},
+    {"id": "badge_diamond", "type": "badge", "title": "Бриллиант", "cost": 600},
+    # --- Цвет имени ---
     {"id": "color_red", "type": "name_color", "title": "Красный", "cost": 100},
     {"id": "color_blue", "type": "name_color", "title": "Синий", "cost": 100},
     {"id": "color_purple", "type": "name_color", "title": "Фиолетовый", "cost": 150},
     {"id": "color_gold", "type": "name_color", "title": "Золотой", "cost": 200},
+    {"id": "color_green", "type": "name_color", "title": "Зелёный", "cost": 100},
+    {"id": "color_cyan", "type": "name_color", "title": "Бирюзовый", "cost": 100},
+    {"id": "color_pink", "type": "name_color", "title": "Розовый", "cost": 150},
+    {"id": "color_orange", "type": "name_color", "title": "Оранжевый", "cost": 100},
+    {"id": "color_teal", "type": "name_color", "title": "Тёмная бирюза", "cost": 120},
+    {"id": "color_lime", "type": "name_color", "title": "Лайм", "cost": 120},
 ]
 _COSMETICS_BY_ID = {c["id"]: c for c in COSMETICS_CATALOG}
 _COSMETIC_SLOT_FIELD = {
