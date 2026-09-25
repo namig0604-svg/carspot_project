@@ -14,7 +14,6 @@ from app.models.user import User
 from app.schemas.car import CarCreate, CarOut, CarUpdate, GarageOut
 from app.schemas.user import UserPublic
 from app.deps import get_current_active_user, get_optional_user
-from app.services import award_xp
 
 router = APIRouter()
 
@@ -86,7 +85,6 @@ def create_car(
         _clear_other_primary(db, current_user.id, car.id)
 
     _refresh_cars_count(db, current_user.id)
-    award_xp(db, current_user, 20, "car_add")
     db.commit()
     db.refresh(car)
     return car

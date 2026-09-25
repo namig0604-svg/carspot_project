@@ -63,8 +63,11 @@ class User(Base):
     coin_balance = Column(Integer, default=0, nullable=False)
 
     # --- Прокачка профиля за CarSpot Coins ---
+    # xp — бонусный опыт, купленный за монеты (/api/coins/profile/xp-boost):
+    # прибавляется ПОВЕРХ уровня, который фронтенд считает из живой
+    # статистики (lib/utils/gamification.dart), а не заменяет его — так
+    # уровень не может "разъехаться" между покупкой и реальными достижениями.
     xp = Column(Integer, default=0, nullable=False)
-    xp_boost_until = Column(DateTime, nullable=True)
     profile_boosted_until = Column(DateTime, nullable=True)
     equipped_frame = Column(String(40), nullable=True)
     equipped_badge = Column(String(40), nullable=True)
@@ -99,14 +102,6 @@ class User(Base):
     def is_premium(self) -> bool:
         """Premium активен = premium_until в будущем (пробный период или награда за рефералов)."""
         return bool(self.premium_until and self.premium_until > utcnow())
-
-    @property
-    def level(self) -> int:
-        """Уровень профиля — вычисляется по XP, см. app.services.level_for_xp().
-        Локальный импорт — иначе цикл app.models.user <-> app.services."""
-        from app.services import level_for_xp
-
-        return level_for_xp(self.xp or 0)
 
 
 class UserLike(Base):

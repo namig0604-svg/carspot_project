@@ -59,18 +59,15 @@ class CosmeticUnequipRequest(BaseModel):
 
 
 class ProfileStatusOut(BaseModel):
-    """Всё, что нужно экрану "Прокачка профиля": уровень/XP с порогами для
-    прогресс-бара и состояние обоих временных бустов — чтобы фронтенду не
-    дублировать формулу уровня из app.services.level_for_xp у себя в Dart."""
+    """Цены и состояние бустов для экрана "Прокачка профиля". Сам уровень
+    (сколько всего XP и на каком он уровне) фронтенд считает сам —
+    lib/utils/gamification.dart — суммируя свою статистику с полем xp из
+    UserMe/UserPublic (бонус, купленный за монеты); бэкенд его не дублирует,
+    чтобы не могло разъехаться с тем, что показывает профиль."""
 
-    level: int
-    xp: int
-    xp_for_current_level: int
-    xp_for_next_level: int
-    profile_boosted_until: Optional[datetime] = None
-    xp_boost_until: Optional[datetime] = None
-    profile_boost_cost: int
+    bonus_xp: int
     xp_boost_cost: int
-    xp_boost_hours: int
-    xp_boost_multiplier: int
+    xp_boost_grant_amount: int
+    profile_boosted_until: Optional[datetime] = None
+    profile_boost_cost: int
     boost_duration_hours: int

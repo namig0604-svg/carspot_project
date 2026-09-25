@@ -102,7 +102,6 @@ def _ensure_columns() -> None:
         ("premium_payments", "purchase_token", "VARCHAR(300)"),
         ("users", "coin_balance", "INTEGER DEFAULT 0"),
         ("users", "xp", "INTEGER DEFAULT 0"),
-        ("users", "xp_boost_until", "TIMESTAMP"),
         ("users", "profile_boosted_until", "TIMESTAMP"),
         ("users", "equipped_frame", "VARCHAR(40)"),
         ("users", "equipped_badge", "VARCHAR(40)"),

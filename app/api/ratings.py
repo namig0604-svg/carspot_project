@@ -22,7 +22,7 @@ from app.schemas.rating import (
     UserRatingOut,
 )
 from app.schemas.user import UserPublic
-from app.services import award_xp, recalc_event_rating, recalc_user_rating, users_by_ids
+from app.services import recalc_event_rating, recalc_user_rating, users_by_ids
 
 router = APIRouter()
 
@@ -169,9 +169,6 @@ def rate_user(
     else:
         rating = UserRating(rater_user_id=current_user.id, **payload.model_dump())
         db.add(rating)
-        # XP только за первую оценку от конкретного человека — иначе можно
-        # было бы фармить уровень, без конца переоценивая один и тот же профиль.
-        award_xp(db, rated_user, 8, "rating_received")
 
     db.flush()
     recalc_user_rating(db, payload.rated_user_id)

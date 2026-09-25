@@ -107,9 +107,12 @@ class Settings:
     COIN_BOOST_COST_EVENT: int = _get_int("COIN_BOOST_COST_EVENT", 150)
     COIN_BOOST_COST_BUSINESS: int = _get_int("COIN_BOOST_COST_BUSINESS", 150)
 
-    # --- Прокачка профиля за монеты: приоритет в поиске и XP-бустер ---
+    # --- Прокачка профиля за монеты: приоритет в поиске и бонусный XP ---
+    # Буст поиска — та же механика, что у сходок/автосервисов (BOOST_DURATION_HOURS).
     COIN_COST_PROFILE_BOOST: int = _get_int("COIN_COST_PROFILE_BOOST", 150)
+    # XP-бустер — разовая покупка: сразу даёт пачку опыта поверх уровня,
+    # который приложение считает из реальной статистики (не таймер/множитель —
+    # чтобы уровень не "откатывался" назад, когда действие боста заканчивается).
     COIN_COST_XP_BOOST: int = _get_int("COIN_COST_XP_BOOST", 200)
-    XP_BOOST_MULTIPLIER: int = _get_int("XP_BOOST_MULTIPLIER", 2)
-    XP_BOOST_DURATION_HOURS: int = _get_int("XP_BOOST_DURATION_HOURS", 48)
+    XP_BOOST_GRANT_AMOUNT: int = _get_int("XP_BOOST_GRANT_AMOUNT", 300)
 settings = Settings()

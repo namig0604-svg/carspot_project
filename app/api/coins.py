@@ -39,7 +39,7 @@ from app.schemas.coin import (
     ProfileStatusOut,
 )
 from app.schemas.user import UserMe
-from app.services import InsufficientCoinsError, grant_coins, level_for_xp, spend_coins, xp_for_level
+from app.services import InsufficientCoinsError, grant_coins, spend_coins
 
 router = APIRouter()
 
@@ -173,22 +173,15 @@ def list_transactions(
 @router.get(
     "/profile/status",
     response_model=ProfileStatusOut,
-    summary="Уровень/XP и состояние бустов профиля — для экрана \"Прокачка профиля\"",
+    summary="Цены и состояние бустов профиля — для экрана \"Прокачка профиля\"",
 )
 def get_profile_status(current_user: User = Depends(get_current_active_user)):
-    xp = current_user.xp or 0
-    level = level_for_xp(xp)
     return ProfileStatusOut(
-        level=level,
-        xp=xp,
-        xp_for_current_level=xp_for_level(level),
-        xp_for_next_level=xp_for_level(level + 1),
-        profile_boosted_until=current_user.profile_boosted_until,
-        xp_boost_until=current_user.xp_boost_until,
-        profile_boost_cost=settings.COIN_COST_PROFILE_BOOST,
+        bonus_xp=current_user.xp or 0,
         xp_boost_cost=settings.COIN_COST_XP_BOOST,
-        xp_boost_hours=settings.XP_BOOST_DURATION_HOURS,
-        xp_boost_multiplier=settings.XP_BOOST_MULTIPLIER,
+        xp_boost_grant_amount=settings.XP_BOOST_GRANT_AMOUNT,
+        profile_boosted_until=current_user.profile_boosted_until,
+        profile_boost_cost=settings.COIN_COST_PROFILE_BOOST,
         boost_duration_hours=settings.BOOST_DURATION_HOURS,
     )
 
@@ -323,28 +316,24 @@ def boost_profile(
 @router.post(
     "/profile/xp-boost",
     response_model=UserMe,
-    summary=(
-        f"Включить XP-бустер (x{settings.XP_BOOST_MULTIPLIER}) на "
-        f"{settings.XP_BOOST_DURATION_HOURS} ч. за {settings.COIN_COST_XP_BOOST} монет"
-    ),
+    summary=f"Купить {settings.XP_BOOST_GRANT_AMOUNT} бонусного XP за {settings.COIN_COST_XP_BOOST} монет",
 )
 def boost_xp(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    now = utcnow()
-    if current_user.xp_boost_until and current_user.xp_boost_until > now:
-        raise HTTPException(
-            status_code=400,
-            detail=f"XP-бустер уже активен до {current_user.xp_boost_until.isoformat()}",
-        )
-
+    """
+    Разовая покупка — сразу прибавляет settings.XP_BOOST_GRANT_AMOUNT к
+    current_user.xp (бонус поверх уровня, который фронтенд считает из живой
+    статистики, см. models/user.py). Можно покупать сколько угодно раз
+    подряд, в отличие от боста поиска/сходок — здесь нет "уже активен".
+    """
     try:
         spend_coins(db, current_user, settings.COIN_COST_XP_BOOST, "xp_boost")
     except InsufficientCoinsError as e:
         raise HTTPException(status_code=402, detail=str(e))
 
-    current_user.xp_boost_until = now + timedelta(hours=settings.XP_BOOST_DURATION_HOURS)
+    current_user.xp = (current_user.xp or 0) + settings.XP_BOOST_GRANT_AMOUNT
     db.commit()
     db.refresh(current_user)
     return current_user

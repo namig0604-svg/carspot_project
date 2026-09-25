@@ -69,7 +69,7 @@ class UserPublic(BaseModel):
     cars_count: int = 0
     likes_count: int = 0
     is_liked: bool = False
-    level: int = 1
+    xp: int = 0  # бонусный опыт за монеты — плюсуется к уровню, который считает фронтенд
     equipped_frame: Optional[str] = None
     equipped_badge: Optional[str] = None
     equipped_name_color: Optional[str] = None
@@ -88,8 +88,6 @@ class UserMe(UserPublic):
     premium_trial_used: bool = False
     profile_views_count: int = 0
     coin_balance: int = 0
-    xp: int = 0
-    xp_boost_until: Optional[datetime] = None
     profile_boosted_until: Optional[datetime] = None
 
 
