@@ -31,7 +31,7 @@ class AdminRankOut(BaseModel):
 
 class AdminGrantPremiumRequest(BaseModel):
     days: int = Field(..., gt=0, le=3650)
-    tier: str = Field("pro", description="basic | pro")
+    tier: str = Field("pro", description="basic | pro | max")
 
 
 class AdminGrantPremiumOut(BaseModel):

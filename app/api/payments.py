@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
 from app.models.base import new_id, utcnow
@@ -55,6 +56,20 @@ PREMIUM_PLANS = {
         "days": 365,
         "amount_usd": 19.99,
         "google_play_product_id": "carspot_basic_year",
+    },
+    "max_month": {
+        "title": "CarSpot Max на месяц",
+        "tier": "max",
+        "days": 30,
+        "amount_usd": 9.99,
+        "google_play_product_id": "carspot_max_month",
+    },
+    "max_year": {
+        "title": "CarSpot Max на год",
+        "tier": "max",
+        "days": 365,
+        "amount_usd": 89.99,
+        "google_play_product_id": "carspot_max_year",
     },
 }
 
@@ -202,6 +217,10 @@ async def trybit_webhook(request: Request, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.id == payment.user_id).first()
         if user:
             extend_premium(user, payment.days, tier=payment.tier)
+            if payment.tier == "max":
+                # Эксклюзив тарифа Max — бонусный XP при каждой настоящей
+                # оплате (и продлении), поверх обычного уровня.
+                user.xp = (user.xp or 0) + settings.PREMIUM_ULTRA_PURCHASE_BONUS_XP
 
         db.commit()
 
@@ -264,6 +283,8 @@ def verify_google_play_purchase(
         current_user.premium_until = result["expiry"].replace(tzinfo=None)
     else:
         extend_premium(current_user, plan["days"], tier=plan["tier"])
+    if plan["tier"] == "max":
+        current_user.xp = (current_user.xp or 0) + settings.PREMIUM_ULTRA_PURCHASE_BONUS_XP
 
     db.commit()
     db.refresh(payment)

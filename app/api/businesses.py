@@ -394,7 +394,7 @@ def boost_business(
             detail=f"Буст уже активен до {business.boosted_until.isoformat()}",
         )
 
-    business.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
+    business.boosted_until = now + timedelta(hours=premium_tiers.boost_duration_hours(current_user))
     db.commit()
     db.refresh(business)
     return business

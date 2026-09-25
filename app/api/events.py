@@ -543,7 +543,7 @@ def boost_event(
             detail=f"Буст уже активен до {event.boosted_until.isoformat()}",
         )
 
-    event.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
+    event.boosted_until = now + timedelta(hours=premium_tiers.boost_duration_hours(current_user))
     db.commit()
     db.refresh(event)
     return event

@@ -333,7 +333,7 @@ def boost_profile(
         except InsufficientCoinsError as e:
             raise HTTPException(status_code=402, detail=str(e))
 
-    current_user.profile_boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
+    current_user.profile_boosted_until = now + timedelta(hours=premium_tiers.boost_duration_hours(current_user))
     db.commit()
     db.refresh(current_user)
     return current_user

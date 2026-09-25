@@ -50,25 +50,35 @@ class Settings:
     DEFAULT_SEARCH_RADIUS_KM: float = float(os.getenv("DEFAULT_SEARCH_RADIUS_KM", "50"))
 
     # --- CarSpot Premium ---
-    # Два уровня: Basic (дешевле, часть плюшек) и Pro (все плюшки, текущая
-    # цена и лимиты — так существующие подписчики ничего не теряют).
+    # Три уровня: Basic (дешевле, часть плюшек), Pro (был единственным
+    # Premium раньше — тот же вход по цене, лимиты подняты) и Max (топ,
+    # самые жирные лимиты + эксклюзивные плюшки). Существующие подписчики
+    # Pro ничего не теряют — только выигрывают от поднятых лимитов.
     # Больше машин в гараже, закреплённые фото, добавление автосервисов.
-    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 25)  # Pro
+    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 30)  # Pro (было 25)
     PREMIUM_BASIC_MAX_CARS_PER_USER: int = _get_int("PREMIUM_BASIC_MAX_CARS_PER_USER", 15)
+    PREMIUM_ULTRA_MAX_CARS_PER_USER: int = _get_int("PREMIUM_ULTRA_MAX_CARS_PER_USER", 60)  # тариф Max
     PREMIUM_TRIAL_DAYS: int = _get_int("PREMIUM_TRIAL_DAYS", 14)
     # За каждые REFERRALS_PER_PREMIUM_MONTH приглашённых друзей — PREMIUM_MONTH_DAYS Premium.
     REFERRALS_PER_PREMIUM_MONTH: int = _get_int("REFERRALS_PER_PREMIUM_MONTH", 10)
     PREMIUM_MONTH_DAYS: int = _get_int("PREMIUM_MONTH_DAYS", 30)
     # На сколько часов "буст" поднимает сходку/автосервис/профиль в топ. Для
-    # Pro бесплатно (см. app/premium_tiers.py::gets_free_boost), остальные
-    # платят монетами.
-    BOOST_DURATION_HOURS: int = _get_int("BOOST_DURATION_HOURS", 24)
+    # Pro и Max бесплатно (см. app/premium_tiers.py::gets_free_boost) — у
+    # Max ещё и вдвое дольше держится наверху.
+    BOOST_DURATION_HOURS: int = _get_int("BOOST_DURATION_HOURS", 24)  # Pro
+    PREMIUM_ULTRA_BOOST_DURATION_HOURS: int = _get_int("PREMIUM_ULTRA_BOOST_DURATION_HOURS", 48)  # Max
     # Сколько строк отдаём в списках "кто лайкнул" / "кто смотрел профиль".
-    PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 50)  # Pro
+    PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 75)  # Pro (было 50)
     PREMIUM_BASIC_INSIGHTS_LIMIT: int = _get_int("PREMIUM_BASIC_INSIGHTS_LIMIT", 15)
+    PREMIUM_ULTRA_INSIGHTS_LIMIT: int = _get_int("PREMIUM_ULTRA_INSIGHTS_LIMIT", 300)  # тариф Max
     # Сколько автосервисов/ателье может добавить один владелец.
-    PREMIUM_PRO_MAX_BUSINESSES: int = _get_int("PREMIUM_PRO_MAX_BUSINESSES", 5)
+    PREMIUM_PRO_MAX_BUSINESSES: int = _get_int("PREMIUM_PRO_MAX_BUSINESSES", 8)  # было 5
     PREMIUM_BASIC_MAX_BUSINESSES: int = _get_int("PREMIUM_BASIC_MAX_BUSINESSES", 1)
+    PREMIUM_ULTRA_MAX_BUSINESSES: int = _get_int("PREMIUM_ULTRA_MAX_BUSINESSES", 25)  # тариф Max
+    # Бонусный XP, который начисляется при каждой настоящей оплате тарифа
+    # Max (при продлении — тоже) поверх обычного уровня, который считает
+    # фронтенд (см. gamification.dart) — эксклюзив тарифа Max.
+    PREMIUM_ULTRA_PURCHASE_BONUS_XP: int = _get_int("PREMIUM_ULTRA_PURCHASE_BONUS_XP", 200)
 
     # --- Trybit (крипто-эквайринг для оплаты Premium, работает в СНГ) ---
     TRYBIT_SHOP_ID: str = os.getenv("TRYBIT_SHOP_ID", "")

@@ -402,7 +402,7 @@ def admin_grant_coins(
 @router.post(
     "/premium/grant/{user_id}",
     response_model=AdminGrantPremiumOut,
-    summary="Выдать CarSpot Premium (Basic/Pro) пользователю вручную — только разработчик и тех.администратор",
+    summary="Выдать CarSpot Premium (Basic/Pro/Max) пользователю вручную — только разработчик и тех.администратор",
 )
 def admin_grant_premium(
     user_id: str,
@@ -410,8 +410,8 @@ def admin_grant_premium(
     db: Session = Depends(get_db),
     admin: User = Depends(require_rank(RANK_TECH_ADMIN)),
 ):
-    if payload.tier not in ("basic", "pro"):
-        raise HTTPException(status_code=400, detail="tier должен быть basic или pro")
+    if payload.tier not in ("basic", "pro", "max"):
+        raise HTTPException(status_code=400, detail="tier должен быть basic, pro или max")
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
