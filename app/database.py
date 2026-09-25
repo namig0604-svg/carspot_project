@@ -106,6 +106,7 @@ def _ensure_columns() -> None:
         ("users", "equipped_frame", "VARCHAR(40)"),
         ("users", "equipped_badge", "VARCHAR(40)"),
         ("users", "equipped_name_color", "VARCHAR(40)"),
+        ("users", "admin_rank", "VARCHAR(20)"),
     ]
     try:
         with engine.connect() as conn:

@@ -42,6 +42,10 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     ban_reason = Column(Text, nullable=True)
 
+    # --- Иерархия рангов администрации (см. app/ranks.py) ---
+    # None = обычный пользователь. Отдельно от is_admin — см. docstring в ranks.py.
+    admin_rank = Column(String(20), nullable=True)
+
     # --- CarSpot Premium ---
     # is_premium больше не хранимый флаг, а вычисляется из premium_until (см. ниже) —
     # так же, как is_online вычисляется из last_seen_at. Продлевается 14-дневным

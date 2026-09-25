@@ -59,6 +59,28 @@ def require_admin(current_user: User = Depends(get_current_active_user)) -> User
     return current_user
 
 
+def require_rank(min_rank: str):
+    """
+    Фабрика зависимостей для чувствительных ручек (выдача монет, назначение
+    рангов) — требует явно назначенный admin_rank не ниже min_rank (см.
+    app.ranks.RANK_ORDER). Строже, чем require_admin: старый is_admin=True
+    без явного ранга сюда не пускает.
+    """
+    from app.ranks import RANK_ORDER, rank_level
+
+    min_level = RANK_ORDER[min_rank]
+
+    def _dep(current_user: User = Depends(get_current_active_user)) -> User:
+        if rank_level(current_user) < min_level:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав администрации для этого действия",
+            )
+        return current_user
+
+    return _dep
+
+
 def get_optional_user(
     token: Optional[str] = Depends(oauth2_scheme),
     db: Session = Depends(get_db),

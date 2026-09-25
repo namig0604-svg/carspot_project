@@ -97,6 +97,7 @@ class UserAdminOut(UserPublic):
     email: EmailStr
     is_active: bool = True
     is_admin: bool = False
+    admin_rank: Optional[str] = None
     ban_reason: Optional[str] = None
 
 

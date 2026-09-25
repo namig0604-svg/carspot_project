@@ -11,13 +11,20 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import Pagination, require_admin
+from app.deps import Pagination, require_admin, require_rank
 from app.models.base import utcnow
 from app.models.business import Business
 from app.models.report import REPORT_STATUSES, REPORT_TARGET_TYPES, Report
 from app.models.user import User
 from app.geocoding import reverse_geocode_address
+from app.ranks import ALL_RANKS, RANK_DEVELOPER, RANK_TECH_ADMIN
 from app.osm_import import element_to_business_fields, fetch_overpass_elements
+from app.schemas.admin import (
+    AdminGrantCoinsOut,
+    AdminGrantCoinsRequest,
+    AdminRankOut,
+    AdminSetRankRequest,
+)
 from app.schemas.business import OsmImportResult
 from app.schemas.report import (
     ReportListResponse,
@@ -26,7 +33,7 @@ from app.schemas.report import (
     UserBanPayload,
 )
 from app.schemas.user import UserAdminOut, UserPublic
-from app.services import users_by_ids
+from app.services import grant_coins, users_by_ids
 
 router = APIRouter()
 
@@ -316,3 +323,75 @@ def geocode_business_addresses(
     )
 
     return {"processed": len(candidates), "updated": updated, "remaining": remaining}
+
+
+# ─────────────────────── РАНГИ АДМИНИСТРАЦИИ И РУЧНАЯ ВЫДАЧА МОНЕТ ───────────────────────
+# Отдельно от require_admin выше — см. подробный docstring в app/ranks.py.
+# Назначать ранги может только разработчик; выдавать монеты вручную — только
+# разработчик и тех.администратор.
+
+@router.get(
+    "/ranks",
+    response_model=List[AdminRankOut],
+    summary="Список пользователей с рангом администрации",
+)
+def list_admin_ranks(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_rank(RANK_TECH_ADMIN)),
+):
+    return db.query(User).filter(User.admin_rank.isnot(None)).all()
+
+
+@router.post(
+    "/ranks/{user_id}",
+    response_model=AdminRankOut,
+    summary="Назначить (или снять) ранг администрации — только разработчик",
+)
+def set_admin_rank(
+    user_id: str,
+    payload: AdminSetRankRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_rank(RANK_DEVELOPER)),
+):
+    if payload.rank is not None and payload.rank not in ALL_RANKS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неизвестный ранг: {payload.rank}. Допустимые: {', '.join(ALL_RANKS)}",
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Нельзя менять свой собственный ранг через эту ручку")
+
+    user.admin_rank = payload.rank
+    # is_admin — общий флаг для старых ручек модерации выше (не трогаем их
+    # логику): любой назначенный ранг администрации включает его автоматически,
+    # снятие ранга — выключает.
+    user.is_admin = payload.rank is not None
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post(
+    "/coins/grant/{user_id}",
+    response_model=AdminGrantCoinsOut,
+    summary="Выдать монеты пользователю вручную — только разработчик и тех.администратор",
+)
+def admin_grant_coins(
+    user_id: str,
+    payload: AdminGrantCoinsRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_rank(RANK_TECH_ADMIN)),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    grant_coins(db, user, payload.amount, "admin_grant", reference_id=admin.id)
+    db.commit()
+    db.refresh(user)
+    return AdminGrantCoinsOut(user_id=user.id, balance=user.coin_balance or 0, granted=payload.amount)
