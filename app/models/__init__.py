@@ -8,6 +8,7 @@ from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubFavorite, ClubMember
 from app.models.coin_transaction import CoinTransaction
+from app.models.user_cosmetic import UserCosmetic
 from app.models.comment import Comment
 from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.friendship import Friendship
@@ -47,6 +48,7 @@ __all__ = [
     "DeviceToken",
     "PremiumPayment",
     "CoinTransaction",
+    "UserCosmetic",
     "Photo",
     "PhotoLike",
     "EventRating",

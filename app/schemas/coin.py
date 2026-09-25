@@ -39,3 +39,38 @@ class CoinTransactionOut(BaseModel):
     type: str
     reference_id: Optional[str] = None
     created_at: datetime
+
+
+class CosmeticOut(BaseModel):
+    id: str
+    type: str  # "frame" | "badge" | "name_color"
+    title: str
+    cost: int
+    owned: bool = False
+    equipped: bool = False
+
+
+class CosmeticActionRequest(BaseModel):
+    cosmetic_id: str
+
+
+class CosmeticUnequipRequest(BaseModel):
+    slot: str  # "frame" | "badge" | "name_color"
+
+
+class ProfileStatusOut(BaseModel):
+    """Всё, что нужно экрану "Прокачка профиля": уровень/XP с порогами для
+    прогресс-бара и состояние обоих временных бустов — чтобы фронтенду не
+    дублировать формулу уровня из app.services.level_for_xp у себя в Dart."""
+
+    level: int
+    xp: int
+    xp_for_current_level: int
+    xp_for_next_level: int
+    profile_boosted_until: Optional[datetime] = None
+    xp_boost_until: Optional[datetime] = None
+    profile_boost_cost: int
+    xp_boost_cost: int
+    xp_boost_hours: int
+    xp_boost_multiplier: int
+    boost_duration_hours: int

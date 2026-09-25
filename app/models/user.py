@@ -62,6 +62,14 @@ class User(Base):
     # --- CarSpot Coins (внутренняя валюта) ---
     coin_balance = Column(Integer, default=0, nullable=False)
 
+    # --- Прокачка профиля за CarSpot Coins ---
+    xp = Column(Integer, default=0, nullable=False)
+    xp_boost_until = Column(DateTime, nullable=True)
+    profile_boosted_until = Column(DateTime, nullable=True)
+    equipped_frame = Column(String(40), nullable=True)
+    equipped_badge = Column(String(40), nullable=True)
+    equipped_name_color = Column(String(40), nullable=True)
+
     # --- Реферальная программа ---
     referral_code = Column(String(20), unique=True, index=True, nullable=True)
     referred_by_id = Column(String(36), index=True, nullable=True)
@@ -91,6 +99,14 @@ class User(Base):
     def is_premium(self) -> bool:
         """Premium активен = premium_until в будущем (пробный период или награда за рефералов)."""
         return bool(self.premium_until and self.premium_until > utcnow())
+
+    @property
+    def level(self) -> int:
+        """Уровень профиля — вычисляется по XP, см. app.services.level_for_xp().
+        Локальный импорт — иначе цикл app.models.user <-> app.services."""
+        from app.services import level_for_xp
+
+        return level_for_xp(self.xp or 0)
 
 
 class UserLike(Base):

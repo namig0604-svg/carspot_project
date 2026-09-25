@@ -4,7 +4,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -45,8 +45,11 @@ def search_users(
     if city:
         query = query.filter(func.lower(User.city) == city.lower())
 
+    # Профили с активным бустом за монеты (см. /api/coins/profile/boost)
+    # поднимаются в топ поиска — тот же принцип, что и у бустов сходок/автосервисов.
+    boosted_rank = case((User.profile_boosted_until > utcnow(), 0), else_=1)
     return (
-        query.order_by(User.average_rating.desc(), User.created_at.desc())
+        query.order_by(boosted_rank, User.average_rating.desc(), User.created_at.desc())
         .offset(page.offset)
         .limit(page.limit)
         .all()

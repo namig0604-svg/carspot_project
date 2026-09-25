@@ -33,6 +33,7 @@ from app.schemas.event import (
 from app.schemas.user import UserPublic
 from app.services import (
     add_room_member,
+    award_xp,
     expire_ended_events,
     get_or_create_event_room,
     notify,
@@ -168,6 +169,7 @@ def create_event(
 
     current_user.events_created = (current_user.events_created or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
+    award_xp(db, current_user, 25, "event_create")
 
     if event.club_id:
         refresh_events_count(db, event.club_id)
@@ -703,6 +705,7 @@ def join_event(
 
     event.participants_count = (event.participants_count or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
+    award_xp(db, current_user, 10, "event_join")
 
     # Добавляем в чат сходки
     room = get_or_create_event_room(db, event)

@@ -69,6 +69,10 @@ class UserPublic(BaseModel):
     cars_count: int = 0
     likes_count: int = 0
     is_liked: bool = False
+    level: int = 1
+    equipped_frame: Optional[str] = None
+    equipped_badge: Optional[str] = None
+    equipped_name_color: Optional[str] = None
     created_at: datetime
 
 
@@ -84,6 +88,9 @@ class UserMe(UserPublic):
     premium_trial_used: bool = False
     profile_views_count: int = 0
     coin_balance: int = 0
+    xp: int = 0
+    xp_boost_until: Optional[datetime] = None
+    profile_boosted_until: Optional[datetime] = None
 
 
 class UserAdminOut(UserPublic):

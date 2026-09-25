@@ -305,6 +305,46 @@ def grant_coins(
     return tx
 
 
+# ─────────────────────── ПРОКАЧКА ПРОФИЛЯ (XP, уровень) ───────────────────────
+
+def xp_for_level(level: int) -> int:
+    """
+    Сколько всего XP нужно накопить, чтобы достичь уровня `level`.
+    Треугольная кривая (на каждый следующий уровень нужно на 50*2=100 XP
+    больше, чем на предыдущий шаг): 1 ур. — 0 XP, 2 ур. — 100, 3 ур. — 300,
+    4 ур. — 600, 5 ур. — 1000 и т.д. Прогрессивная, но не карательная —
+    активному пользователю пара уровней в неделю вполне по силам.
+    """
+    if level <= 1:
+        return 0
+    n = level - 1
+    return 50 * n * (n + 1)
+
+
+def level_for_xp(xp: int) -> int:
+    """Обратная функция к xp_for_level — уровень по накопленному XP."""
+    xp = max(0, xp or 0)
+    level = 1
+    while xp >= xp_for_level(level + 1):
+        level += 1
+    return level
+
+
+def award_xp(db: Session, user: User, base_amount: int, reason: str) -> None:
+    """
+    Начисляет XP пользователю за действие в приложении (создал сходку,
+    записался на неё, добавил машину, получил оценку от другого
+    пользователя...). Если у пользователя сейчас активен XP-бустер,
+    купленный за монеты (см. /api/coins/profile/xp-boost), сумма
+    умножается на settings.XP_BOOST_MULTIPLIER. `reason` пока используется
+    только для логов/отладки, в БД не пишется.
+    """
+    multiplier = 1
+    if user.xp_boost_until and user.xp_boost_until > utcnow():
+        multiplier = settings.XP_BOOST_MULTIPLIER
+    user.xp = (user.xp or 0) + base_amount * multiplier
+
+
 # ─────────────────────────── УВЕДОМЛЕНИЯ ───────────────────────────
 
 _PUSH_TITLES = {

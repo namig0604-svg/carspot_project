@@ -101,6 +101,12 @@ def _ensure_columns() -> None:
         ("users", "location_updated_at", "TIMESTAMP"),
         ("premium_payments", "purchase_token", "VARCHAR(300)"),
         ("users", "coin_balance", "INTEGER DEFAULT 0"),
+        ("users", "xp", "INTEGER DEFAULT 0"),
+        ("users", "xp_boost_until", "TIMESTAMP"),
+        ("users", "profile_boosted_until", "TIMESTAMP"),
+        ("users", "equipped_frame", "VARCHAR(40)"),
+        ("users", "equipped_badge", "VARCHAR(40)"),
+        ("users", "equipped_name_color", "VARCHAR(40)"),
     ]
     try:
         with engine.connect() as conn:

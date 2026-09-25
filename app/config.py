@@ -106,4 +106,10 @@ class Settings:
     # пользователя нет CarSpot Premium (у Premium буст бесплатный, как и раньше).
     COIN_BOOST_COST_EVENT: int = _get_int("COIN_BOOST_COST_EVENT", 150)
     COIN_BOOST_COST_BUSINESS: int = _get_int("COIN_BOOST_COST_BUSINESS", 150)
+
+    # --- Прокачка профиля за монеты: приоритет в поиске и XP-бустер ---
+    COIN_COST_PROFILE_BOOST: int = _get_int("COIN_COST_PROFILE_BOOST", 150)
+    COIN_COST_XP_BOOST: int = _get_int("COIN_COST_XP_BOOST", 200)
+    XP_BOOST_MULTIPLIER: int = _get_int("XP_BOOST_MULTIPLIER", 2)
+    XP_BOOST_DURATION_HOURS: int = _get_int("XP_BOOST_DURATION_HOURS", 48)
 settings = Settings()
