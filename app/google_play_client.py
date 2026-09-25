@@ -163,3 +163,52 @@ def acknowledge_subscription(product_id: str, purchase_token: str) -> None:
         raise GooglePlayError(
             f"Google Play вернул ошибку при подтверждении {response.status_code}: {response.text}"
         )
+
+
+def verify_product_purchase(product_id: str, purchase_token: str) -> dict:
+    """
+    Проверяет разовую покупку (consumable-товар, напр. пакет монет CarSpot
+    Coins) через Play Developer API. purchaseState: 0=куплено, 1=отменено,
+    2=ожидает; consumptionState: 0=не потрачено, 1=уже потрачено.
+    """
+    access_token = _get_access_token()
+    package_name = settings.GOOGLE_PLAY_PACKAGE_NAME
+
+    url = f"{_API_BASE}/applications/{package_name}/purchases/products/{product_id}/tokens/{purchase_token}"
+    try:
+        response = requests.get(url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+    except requests.RequestException as e:
+        raise GooglePlayError(f"Не удалось проверить покупку: {e}") from e
+
+    if response.status_code >= 400:
+        raise GooglePlayError(f"Google Play вернул ошибку {response.status_code}: {response.text}")
+
+    data = response.json()
+    return {
+        "purchased": data.get("purchaseState") == 0,
+        "consumed": data.get("consumptionState") == 1,
+        "order_id": data.get("orderId"),
+    }
+
+
+def consume_product_purchase(product_id: str, purchase_token: str) -> None:
+    """
+    Помечает разовую покупку "потреблённой" — обязательный шаг для
+    consumable-товаров (пакеты монет), иначе Google Play не даст купить тот
+    же товар повторно и через некоторое время автоматически вернёт деньги.
+    """
+    access_token = _get_access_token()
+    package_name = settings.GOOGLE_PLAY_PACKAGE_NAME
+    url = (
+        f"{_API_BASE}/applications/{package_name}/purchases/products/"
+        f"{product_id}/tokens/{purchase_token}:consume"
+    )
+    try:
+        response = requests.post(url, headers={"Authorization": f"Bearer {access_token}"}, json={}, timeout=10)
+    except requests.RequestException as e:
+        raise GooglePlayError(f"Не удалось подтвердить потребление покупки: {e}") from e
+
+    if response.status_code >= 400 and "already" not in response.text.lower():
+        raise GooglePlayError(
+            f"Google Play вернул ошибку при потреблении {response.status_code}: {response.text}"
+        )

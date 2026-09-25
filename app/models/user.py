@@ -59,6 +59,9 @@ class User(Base):
     likes_count = Column(Integer, default=0, nullable=False)
     profile_views_count = Column(Integer, default=0, nullable=False)
 
+    # --- CarSpot Coins (внутренняя валюта) ---
+    coin_balance = Column(Integer, default=0, nullable=False)
+
     # --- Реферальная программа ---
     referral_code = Column(String(20), unique=True, index=True, nullable=True)
     referred_by_id = Column(String(36), index=True, nullable=True)

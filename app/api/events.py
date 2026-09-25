@@ -19,6 +19,7 @@ from app.models.club import ClubMember
 from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.rating import EventRating
 from app.models.user import User
+from app.services import InsufficientCoinsError, spend_coins
 from app.schemas.event import (
     EventCreate,
     EventDetail,
@@ -540,6 +541,43 @@ def boost_event(
             status_code=400,
             detail=f"Буст уже активен до {event.boosted_until.isoformat()}",
         )
+
+    event.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.post(
+    "/{event_id}/boost-with-coins",
+    response_model=EventOut,
+    summary=f"Поднять сходку в топ ленты на {settings.BOOST_DURATION_HOURS} ч. за {settings.COIN_BOOST_COST_EVENT} монет",
+)
+def boost_event_with_coins(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Тот же буст, что и /boost, но платный — монетами CarSpot Coins вместо
+    Premium. Так продвинуть сходку может любой пользователь, даже без
+    подписки, если он готов потратить накопленные/купленные монеты."""
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено")
+    if event.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Только создатель может продвигать сходку")
+
+    now = utcnow()
+    if event.boosted_until and event.boosted_until > now:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Буст уже активен до {event.boosted_until.isoformat()}",
+        )
+
+    try:
+        spend_coins(db, current_user, settings.COIN_BOOST_COST_EVENT, "boost_event", reference_id=event.id)
+    except InsufficientCoinsError as e:
+        raise HTTPException(status_code=402, detail=str(e))
 
     event.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
     db.commit()

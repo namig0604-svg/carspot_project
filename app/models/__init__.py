@@ -7,6 +7,7 @@ from app.models.booking import BusinessBooking
 from app.models.car import Car, CarLike
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubFavorite, ClubMember
+from app.models.coin_transaction import CoinTransaction
 from app.models.comment import Comment
 from app.models.event import Event, EventFavorite, EventParticipant
 from app.models.friendship import Friendship
@@ -45,6 +46,7 @@ __all__ = [
     "Notification",
     "DeviceToken",
     "PremiumPayment",
+    "CoinTransaction",
     "Photo",
     "PhotoLike",
     "EventRating",

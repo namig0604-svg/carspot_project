@@ -26,7 +26,7 @@ from app.schemas.business import (
     BusinessUpdate,
 )
 from app.schemas.user import UserPublic
-from app.services import recalc_business_rating, users_by_ids
+from app.services import InsufficientCoinsError, recalc_business_rating, spend_coins, users_by_ids
 from app.utils.geo import bounding_box, haversine_km
 
 router = APIRouter()
@@ -383,6 +383,39 @@ def boost_business(
             status_code=400,
             detail=f"Буст уже активен до {business.boosted_until.isoformat()}",
         )
+
+    business.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
+    db.commit()
+    db.refresh(business)
+    return business
+
+
+@router.post(
+    "/{business_id}/boost-with-coins",
+    response_model=BusinessOut,
+    summary=f"Поднять заведение в топ каталога на {settings.BOOST_DURATION_HOURS} ч. за {settings.COIN_BOOST_COST_BUSINESS} монет",
+)
+def boost_business_with_coins(
+    business_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Тот же буст, что и /boost, но платный — монетами CarSpot Coins вместо
+    Premium, доступен любому владельцу заведения."""
+    business = _get_business_or_404(db, business_id)
+    _require_owner(business, current_user)
+
+    now = utcnow()
+    if business.boosted_until and business.boosted_until > now:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Буст уже активен до {business.boosted_until.isoformat()}",
+        )
+
+    try:
+        spend_coins(db, current_user, settings.COIN_BOOST_COST_BUSINESS, "boost_business", reference_id=business.id)
+    except InsufficientCoinsError as e:
+        raise HTTPException(status_code=402, detail=str(e))
 
     business.boosted_until = now + timedelta(hours=settings.BOOST_DURATION_HOURS)
     db.commit()

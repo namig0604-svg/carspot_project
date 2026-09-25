@@ -100,4 +100,10 @@ class Settings:
     # когда приложение туда попадёт (см. app/google_play_client.py).
     GOOGLE_PLAY_PACKAGE_NAME: str = os.getenv("GOOGLE_PLAY_PACKAGE_NAME", "com.carspot.app")
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: str = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")
+
+    # --- CarSpot Coins (внутренняя валюта) ---
+    # Сколько монет стоит поднять сходку/автосервис в топ, если у
+    # пользователя нет CarSpot Premium (у Premium буст бесплатный, как и раньше).
+    COIN_BOOST_COST_EVENT: int = _get_int("COIN_BOOST_COST_EVENT", 150)
+    COIN_BOOST_COST_BUSINESS: int = _get_int("COIN_BOOST_COST_BUSINESS", 150)
 settings = Settings()

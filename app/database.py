@@ -100,6 +100,7 @@ def _ensure_columns() -> None:
         ("users", "last_lng", "DOUBLE PRECISION"),
         ("users", "location_updated_at", "TIMESTAMP"),
         ("premium_payments", "purchase_token", "VARCHAR(300)"),
+        ("users", "coin_balance", "INTEGER DEFAULT 0"),
     ]
     try:
         with engine.connect() as conn:

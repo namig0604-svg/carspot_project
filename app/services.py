@@ -247,6 +247,64 @@ def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) ->
         referrer.referral_premium_claimed_count = milestones_earned
 
 
+# ─────────────────────── CARSPOT COINS (внутренняя валюта) ───────────────────────
+
+class InsufficientCoinsError(Exception):
+    """Не хватает монет на балансе для операции."""
+
+
+def spend_coins(db: Session, user: User, amount: int, tx_type: str, reference_id: Optional[str] = None):
+    """
+    Списывает `amount` монет с баланса пользователя и пишет транзакцию.
+    Бросает InsufficientCoinsError, если монет не хватает — коммит делает
+    вызывающий код (после того как выполнит саму операцию, например буст).
+    """
+    if amount <= 0:
+        raise ValueError("amount должен быть положительным")
+    if (user.coin_balance or 0) < amount:
+        raise InsufficientCoinsError(f"Недостаточно монет: нужно {amount}, на балансе {user.coin_balance or 0}")
+
+    user.coin_balance = (user.coin_balance or 0) - amount
+    from app.models.coin_transaction import CoinTransaction  # локальный импорт — без цикла
+
+    tx = CoinTransaction(
+        user_id=user.id,
+        amount=-amount,
+        balance_after=user.coin_balance,
+        type=tx_type,
+        reference_id=reference_id,
+    )
+    db.add(tx)
+    return tx
+
+
+def grant_coins(
+    db: Session,
+    user: User,
+    amount: int,
+    tx_type: str,
+    reference_id: Optional[str] = None,
+    purchase_token: Optional[str] = None,
+):
+    """Начисляет `amount` монет пользователю и пишет транзакцию."""
+    if amount <= 0:
+        raise ValueError("amount должен быть положительным")
+
+    user.coin_balance = (user.coin_balance or 0) + amount
+    from app.models.coin_transaction import CoinTransaction  # локальный импорт — без цикла
+
+    tx = CoinTransaction(
+        user_id=user.id,
+        amount=amount,
+        balance_after=user.coin_balance,
+        type=tx_type,
+        reference_id=reference_id,
+        purchase_token=purchase_token,
+    )
+    db.add(tx)
+    return tx
+
+
 # ─────────────────────────── УВЕДОМЛЕНИЯ ───────────────────────────
 
 _PUSH_TITLES = {
