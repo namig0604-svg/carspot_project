@@ -206,6 +206,42 @@ def _backfill_referral_codes() -> None:
         db.close()
 
 
+def _bootstrap_developer() -> None:
+    """
+    Одноразовый бутстрап: выдаёт ранг "developer" (см. app/ranks.py)
+    аккаунту с username="namig", если разработчика в системе ещё нет —
+    без этого назначать ранги/выдавать монеты вручную было бы некому
+    (require_rank(RANK_DEVELOPER) отклонял бы вообще всех). Дальше
+    разработчик сам назначает ранги другим через POST /api/admin/ranks/{id},
+    так что после первого удачного запуска эта функция больше ничего не
+    меняет (условие ниже перестаёт выполняться).
+    """
+    if not SessionLocal:
+        return
+
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        has_developer = db.query(User).filter(User.admin_rank == "developer").first()
+        if has_developer:
+            return
+
+        user = db.query(User).filter(User.username == "namig").first()
+        if not user:
+            return
+
+        user.admin_rank = "developer"
+        user.is_admin = True
+        db.commit()
+        print("[DB] Аккаунту namig выдан ранг разработчика")
+    except Exception as exc:
+        print(f"[DB] Ошибка _bootstrap_developer: {exc}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def init_db() -> bool:
     if not engine:
         print("[DB] Engine не инициализирован")
@@ -216,6 +252,7 @@ def init_db() -> bool:
         _ensure_columns()
         _fix_legacy_columns()
         _backfill_referral_codes()
+        _bootstrap_developer()
         print("[DB] Таблицы готовы")
         return True
     except Exception as exc:
