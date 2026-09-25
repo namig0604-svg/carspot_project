@@ -13,15 +13,38 @@ from app.deps import get_current_active_user
 from app.models.base import new_id, utcnow
 from app.models.payment import PremiumPayment
 from app.models.user import User
-from app.schemas.payment import CheckoutOut, CheckoutRequest, PaymentStatusOut, PremiumPlanOut
+from app.schemas.payment import CheckoutOut, CheckoutRequest, GooglePlayVerifyRequest, PaymentStatusOut, PremiumPlanOut
 from app.services import extend_premium
 from app.trybit_client import TrybitError, TrybitNotConfiguredError, create_invoice, verify_postback_token
+from app.google_play_client import (
+    GooglePlayError,
+    GooglePlayNotConfiguredError,
+    acknowledge_subscription,
+    verify_subscription,
+)
 
 router = APIRouter()
 
 PREMIUM_PLANS = {
-    "month": {"title": "Premium на месяц", "days": 30, "amount_usd": 4.99},
-    "year": {"title": "Premium на год", "days": 365, "amount_usd": 39.99},
+    "month": {
+        "title": "Premium на месяц",
+        "days": 30,
+        "amount_usd": 4.99,
+        "google_play_product_id": "carspot_premium_month",
+    },
+    "year": {
+        "title": "Premium на год",
+        "days": 365,
+        "amount_usd": 39.99,
+        "google_play_product_id": "carspot_premium_year",
+    },
+}
+
+# product_id в Play Console -> наш внутренний id плана. Строим один раз,
+# используем чтобы не доверять клиенту, какой именно план он "купил" —
+# сервер сам решает по product_id, что проверил Google.
+_GOOGLE_PLAY_PRODUCT_TO_PLAN = {
+    data["google_play_product_id"]: plan_id for plan_id, data in PREMIUM_PLANS.items()
 }
 
 
@@ -132,3 +155,72 @@ async def trybit_webhook(request: Request, db: Session = Depends(get_db)):
         db.commit()
 
     return {"message": "ok"}
+
+
+
+@router.post(
+    "/google-play/verify",
+    response_model=PaymentStatusOut,
+    summary="Подтвердить покупку из Google Play и включить Premium",
+)
+def verify_google_play_purchase(
+    payload: GooglePlayVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    plan_id = _GOOGLE_PLAY_PRODUCT_TO_PLAN.get(payload.product_id)
+    if not plan_id:
+        raise HTTPException(status_code=400, detail=f"Неизвестный товар Google Play: {payload.product_id}")
+    plan = PREMIUM_PLANS[plan_id]
+
+    # Один и тот же purchase_token не должен включать Premium дважды (повтор
+    # запроса с клиента, восстановление покупок и т.п.) — если уже обработан,
+    # просто отдаём его текущий статус.
+    existing = db.query(PremiumPayment).filter(PremiumPayment.purchase_token == payload.purchase_token).first()
+    if existing:
+        return existing
+
+    try:
+        result = verify_subscription(payload.product_id, payload.purchase_token)
+    except GooglePlayNotConfiguredError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except GooglePlayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    if not result["active"]:
+        raise HTTPException(status_code=400, detail="Подписка не активна (проверьте статус оплаты в Google Play)")
+
+    payment = PremiumPayment(
+        user_id=current_user.id,
+        plan=plan_id,
+        amount_usd=plan["amount_usd"],
+        days=plan["days"],
+        order_id=new_id(),
+        provider="google_play",
+        provider_invoice_id=result.get("order_id"),
+        purchase_token=payload.purchase_token,
+        status="paid",
+        paid_at=utcnow(),
+    )
+    db.add(payment)
+
+    # Google Play сам управляет сроком подписки (продления, отмены) — он
+    # источник правды по дате окончания, поэтому выставляем premium_until
+    # ровно по присланному expiry, а не просто приплюсовываем дни плана.
+    if result["expiry"]:
+        current_user.premium_until = result["expiry"].replace(tzinfo=None)
+    else:
+        extend_premium(current_user, plan["days"])
+
+    db.commit()
+    db.refresh(payment)
+
+    try:
+        acknowledge_subscription(payload.product_id, payload.purchase_token)
+    except GooglePlayError:
+        # Premium уже включён — это не должно ломать ответ пользователю.
+        # Если не подтвердится, Google Play через 3 дня автовозвратит деньги,
+        # что стоит отслеживать отдельно (TODO: повторная попытка по cron).
+        pass
+
+    return payment

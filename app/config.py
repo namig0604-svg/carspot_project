@@ -94,4 +94,10 @@ class Settings:
     # защищена, по сути, общеизвестным паролем.
     DOCS_USERNAME: str = os.getenv("DOCS_USERNAME", "carspot")
     DOCS_PASSWORD: str = os.getenv("DOCS_PASSWORD", "Kalicto300")
+
+    # --- Google Play Billing (подписки CarSpot Premium через Play Store) ---
+    # Настраивается в Google Play Console -> Настройка -> Доступ к API,
+    # когда приложение туда попадёт (см. app/google_play_client.py).
+    GOOGLE_PLAY_PACKAGE_NAME: str = os.getenv("GOOGLE_PLAY_PACKAGE_NAME", "com.carspot.app")
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: str = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "")
 settings = Settings()

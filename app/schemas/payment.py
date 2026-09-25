@@ -16,6 +16,11 @@ class CheckoutRequest(BaseModel):
     plan: str  # "month" | "year"
 
 
+class GooglePlayVerifyRequest(BaseModel):
+    product_id: str  # id товара в Play Console, напр. "carspot_premium_month"
+    purchase_token: str  # PurchaseDetails.verificationData.serverVerificationData из in_app_purchase
+
+
 class CheckoutOut(BaseModel):
     payment_id: str
     pay_url: str

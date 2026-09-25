@@ -17,10 +17,15 @@ class PremiumPayment(Base):
     amount_usd = Column(Float, nullable=False)
     days = Column(Integer, nullable=False)
 
-    provider = Column(String(20), default="trybit", nullable=False)
+    provider = Column(String(20), default="trybit", nullable=False)  # "trybit" | "google_play"
     provider_invoice_id = Column(String(100), nullable=True)
     order_id = Column(String(64), unique=True, index=True, nullable=False)
     pay_url = Column(String(500), nullable=True)
+
+    # Только для provider="google_play" — purchaseToken из Google Play
+    # Billing. Уникален, чтобы один и тот же токен нельзя было прислать
+    # повторно и получить Premium второй раз.
+    purchase_token = Column(String(300), unique=True, index=True, nullable=True)
 
     # pending -> paid (или overpaid) / expired
     status = Column(String(20), default="pending", nullable=False)
