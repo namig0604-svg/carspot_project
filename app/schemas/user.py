@@ -89,6 +89,7 @@ class UserMe(UserPublic):
     profile_views_count: int = 0
     coin_balance: int = 0
     profile_boosted_until: Optional[datetime] = None
+    admin_rank: Optional[str] = None
 
 
 class UserAdminOut(UserPublic):
