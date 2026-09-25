@@ -11,6 +11,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
 from app.google_play_client import (
@@ -45,7 +46,11 @@ _COIN_PACKAGES_BY_ID = {p["product_id"]: p for p in COIN_PACKAGES}
 
 @router.get("/balance", response_model=CoinBalanceOut, summary="Баланс монет текущего пользователя")
 def get_balance(current_user: User = Depends(get_current_active_user)):
-    return CoinBalanceOut(balance=current_user.coin_balance or 0)
+    return CoinBalanceOut(
+        balance=current_user.coin_balance or 0,
+        boost_cost_event=settings.COIN_BOOST_COST_EVENT,
+        boost_cost_business=settings.COIN_BOOST_COST_BUSINESS,
+    )
 
 
 @router.get("/packages", response_model=List[CoinPackageOut], summary="Доступные пакеты монет для покупки")

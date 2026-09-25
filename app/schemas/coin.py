@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict
 
 class CoinBalanceOut(BaseModel):
     balance: int
+    boost_cost_event: int
+    boost_cost_business: int
 
 
 class CoinPackageOut(BaseModel):
