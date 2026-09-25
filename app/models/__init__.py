@@ -18,6 +18,13 @@ from app.models.rating import EventRating, SpotRating, UserRating
 from app.models.report import Report
 from app.models.story import Story, StoryView
 from app.models.user import PasswordResetToken, ProfileView, User, UserLike
+from app.models.parking import ParkingSpot
+from app.models.maintenance import MaintenanceRecord
+from app.models.car_document import CarDocument
+from app.models.car_expense import CarExpense
+from app.models.hazard import RoadHazard, RoadHazardVote
+from app.models.part_listing import PartListing
+from app.models.ride_pool import RideOffer, RideBooking
 
 __all__ = [
     "User",
@@ -54,5 +61,14 @@ __all__ = [
     "UserLike",
     "ProfileView",
     "PasswordResetToken",
+    "ParkingSpot",
+    "MaintenanceRecord",
+    "CarDocument",
+    "CarExpense",
+    "RoadHazard",
+    "RoadHazardVote",
+    "PartListing",
+    "RideOffer",
+    "RideBooking",
 ]
 

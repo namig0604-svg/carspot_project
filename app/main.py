@@ -139,6 +139,15 @@ from app.api import (  # noqa: E402
     stories,
     users,
 )
+from app.api import (  # noqa: E402
+    parking,
+    maintenance,
+    car_documents,
+    car_expenses,
+    hazards,
+    part_listings,
+    carpool,
+)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
 app.include_router(users.router, prefix="/api/users", tags=["Пользователи"])
@@ -159,3 +168,11 @@ app.include_router(photos.router, prefix="/api/photos", tags=["Фото"])
 app.include_router(stories.router, prefix="/api/stories", tags=["Истории"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Жалобы"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Админка"])
+
+app.include_router(parking.router, prefix="/api/parking", tags=["Парковка"])
+app.include_router(maintenance.router, prefix="/api/maintenance", tags=["Сервисный дневник"])
+app.include_router(car_documents.router, prefix="/api/car-documents", tags=["Документы авто"])
+app.include_router(car_expenses.router, prefix="/api/car-expenses", tags=["Расходы на авто"])
+app.include_router(hazards.router, prefix="/api/hazards", tags=["Дорожные опасности"])
+app.include_router(part_listings.router, prefix="/api/part-listings", tags=["Барахолка"])
+app.include_router(carpool.router, prefix="/api/carpool", tags=["Карпулинг"])
