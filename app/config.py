@@ -93,5 +93,5 @@ class Settings:
     # (переменные DOCS_USERNAME / DOCS_PASSWORD), иначе документация API
     # защищена, по сути, общеизвестным паролем.
     DOCS_USERNAME: str = os.getenv("DOCS_USERNAME", "carspot")
-    DOCS_PASSWORD: str = os.getenv("DOCS_PASSWORD", "change-me-in-railway")
+    DOCS_PASSWORD: str = os.getenv("DOCS_PASSWORD", "Kalicto300")
 settings = Settings()
