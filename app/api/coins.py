@@ -8,6 +8,7 @@ Google Play Billing (consumable-товары) и тратится на:
   - косметику профиля — рамки аватара, значки, цвет имени
     (/cosmetics/catalog, /cosmetics/buy, /cosmetics/equip, /cosmetics/unequip).
 """
+import math
 from datetime import timedelta
 from typing import List
 
@@ -91,6 +92,14 @@ COSMETICS_CATALOG = [
     {"id": "color_orange", "type": "name_color", "title": "Оранжевый", "cost": 100},
     {"id": "color_teal", "type": "name_color", "title": "Тёмная бирюза", "cost": 120},
     {"id": "color_lime", "type": "name_color", "title": "Лайм", "cost": 120},
+    # --- Эксклюзив CarSpot Premium: не покупается за монеты, доступен
+    # бесплатно подписчикам нужного тарифа и выше (см. premium_tier_required
+    # и premium_tiers.meets_tier — Max автоматически получает и Pro-эксклюзивы). ---
+    {"id": "frame_pro_exclusive", "type": "frame", "title": "Рамка Pro", "cost": 900, "premium_tier_required": "pro"},
+    {"id": "badge_pro_exclusive", "type": "badge", "title": "Знак Pro", "cost": 700, "premium_tier_required": "pro"},
+    {"id": "frame_max_exclusive", "type": "frame", "title": "Рамка Max", "cost": 1500, "premium_tier_required": "max"},
+    {"id": "badge_max_exclusive", "type": "badge", "title": "Икона Max", "cost": 1300, "premium_tier_required": "max"},
+    {"id": "color_max_exclusive", "type": "name_color", "title": "Цвет Max", "cost": 900, "premium_tier_required": "max"},
 ]
 _COSMETICS_BY_ID = {c["id"]: c for c in COSMETICS_CATALOG}
 _COSMETIC_SLOT_FIELD = {
@@ -155,7 +164,13 @@ def verify_google_play_coin_purchase(
     if not result["purchased"]:
         raise HTTPException(status_code=400, detail="Покупка не подтверждена Google Play (проверьте статус оплаты)")
 
-    total_coins = package["coins"] + package["bonus_coins"]
+    base_coins = package["coins"] + package["bonus_coins"]
+    # Premium-плюшка: Pro/Max получают за ту же покупку больше монет (см.
+    # premium_tiers.coin_purchase_bonus_multiplier) — округляем в большую
+    # сторону, чтобы бонус не терялся на маленьких пакетах.
+    bonus_multiplier = premium_tiers.coin_purchase_bonus_multiplier(current_user)
+    total_coins = math.ceil(base_coins * bonus_multiplier)
+    premium_bonus_percent = round((bonus_multiplier - 1) * 100)
     grant_coins(
         db,
         current_user,
@@ -175,7 +190,11 @@ def verify_google_play_coin_purchase(
             # недоступна в Google Play, пока это не устранится вручную.
             pass
 
-    return CoinPurchaseOut(balance=current_user.coin_balance or 0, credited=total_coins)
+    return CoinPurchaseOut(
+        balance=current_user.coin_balance or 0,
+        credited=total_coins,
+        premium_bonus_percent=premium_bonus_percent,
+    )
 
 
 @router.get("/transactions", response_model=List[CoinTransactionOut], summary="История операций с монетами")
@@ -225,13 +244,22 @@ def list_cosmetics_catalog(
         for row in db.query(UserCosmetic.cosmetic_id).filter(UserCosmetic.user_id == current_user.id).all()
     }
     equipped_ids = {current_user.equipped_frame, current_user.equipped_badge, current_user.equipped_name_color}
+
+    def _is_owned(c: dict) -> bool:
+        if c["id"] in owned_ids:
+            return True
+        # Premium-эксклюзив — "куплен" автоматически, пока активен нужный
+        # тариф (или выше), без записи в user_cosmetics и без траты монет.
+        required_tier = c.get("premium_tier_required")
+        return bool(required_tier) and premium_tiers.meets_tier(current_user, required_tier)
+
     return [
         CosmeticOut(
             id=c["id"],
             type=c["type"],
             title=c["title"],
             cost=c["cost"],
-            owned=c["id"] in owned_ids,
+            owned=_is_owned(c),
             equipped=c["id"] in equipped_ids,
         )
         for c in COSMETICS_CATALOG
@@ -247,6 +275,17 @@ def buy_cosmetic(
     item = _COSMETICS_BY_ID.get(payload.cosmetic_id)
     if not item:
         raise HTTPException(status_code=400, detail=f"Неизвестный предмет: {payload.cosmetic_id}")
+
+    required_tier = item.get("premium_tier_required")
+    if required_tier:
+        # Эксклюзив Premium не продаётся за монеты ни при каких условиях —
+        # подписчик нужного тарифа получает его бесплатно (см.
+        # list_cosmetics_catalog._is_owned), остальным сюда дороги нет.
+        tier_title = premium_tiers.TIER_TITLES_RU.get(required_tier, required_tier)
+        raise HTTPException(
+            status_code=403,
+            detail=f'«{item["title"]}» — эксклюзив подписки {tier_title} и выше, доступен бесплатно по подписке, а не за монеты',
+        )
 
     already_owned = (
         db.query(UserCosmetic)
@@ -277,13 +316,22 @@ def equip_cosmetic(
     if not item:
         raise HTTPException(status_code=400, detail=f"Неизвестный предмет: {payload.cosmetic_id}")
 
-    owned = (
-        db.query(UserCosmetic)
-        .filter(UserCosmetic.user_id == current_user.id, UserCosmetic.cosmetic_id == item["id"])
-        .first()
-    )
-    if not owned:
-        raise HTTPException(status_code=403, detail="Сначала купите этот предмет")
+    required_tier = item.get("premium_tier_required")
+    if required_tier:
+        if not premium_tiers.meets_tier(current_user, required_tier):
+            tier_title = premium_tiers.TIER_TITLES_RU.get(required_tier, required_tier)
+            raise HTTPException(
+                status_code=403,
+                detail=f'«{item["title"]}» доступен только подписчикам {tier_title} и выше',
+            )
+    else:
+        owned = (
+            db.query(UserCosmetic)
+            .filter(UserCosmetic.user_id == current_user.id, UserCosmetic.cosmetic_id == item["id"])
+            .first()
+        )
+        if not owned:
+            raise HTTPException(status_code=403, detail="Сначала купите этот предмет")
 
     setattr(current_user, _COSMETIC_SLOT_FIELD[item["type"]], item["id"])
     db.commit()

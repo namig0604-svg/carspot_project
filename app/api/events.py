@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app import premium_tiers
@@ -783,9 +783,19 @@ def list_participants(
         raise HTTPException(status_code=404, detail="Событие не найдено")
 
     # Premium-плюшка: подписчики поднимаются в начало списка участников
-    # (статуснее — тебя видят первым), внутри своей группы — по порядку
-    # присоединения, как и раньше.
-    premium_rank = case((User.premium_until > utcnow(), 0), else_=1)
+    # (статуснее — тебя видят первым), причём Max строго выше Pro, а Pro
+    # строго выше Basic (см. app/premium_tiers.py::priority_rank) — внутри
+    # своей группы порядок как и раньше, по времени присоединения.
+    is_active_premium = User.premium_until > utcnow()
+    premium_rank = case(
+        (and_(is_active_premium, User.premium_tier == premium_tiers.TIER_MAX), 0),
+        (and_(is_active_premium, User.premium_tier == premium_tiers.TIER_PRO), 1),
+        (and_(is_active_premium, User.premium_tier == premium_tiers.TIER_BASIC), 2),
+        # Пробный период/награда за рефералов без явного tier — читается как
+        # Pro (см. premium_tiers.effective_tier), поэтому тоже ранг 1.
+        (is_active_premium, 1),
+        else_=3,
+    )
     participants = (
         db.query(EventParticipant)
         .join(User, EventParticipant.user_id == User.id)

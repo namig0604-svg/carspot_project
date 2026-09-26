@@ -131,3 +131,47 @@ def status_name_color_hex(tier: str | None) -> str | None:
     if tier == TIER_BASIC:
         return "#42A5F5"  # голубой
     return None
+
+
+# Порядок тарифов по возрастанию — используется для плюшек вида "от Pro и
+# выше" (эксклюзивная косметика, приоритет в списках), где Max должен
+# автоматически получать всё, что даёт Pro, а не только свои эксклюзивы.
+TIER_LEVEL = {TIER_BASIC: 1, TIER_PRO: 2, TIER_MAX: 3}
+
+
+def meets_tier(user, required_tier: str) -> bool:
+    """True, если у пользователя активный Premium уровня required_tier или
+    выше (Basic < Pro < Max). Используется для плюшек, доступных "от такого-то
+    тарифа и выше" — например, эксклюзивная косметика в app/api/coins.py."""
+    tier = effective_tier(user)
+    if tier is None:
+        return False
+    return TIER_LEVEL.get(tier, 0) >= TIER_LEVEL.get(required_tier, 999)
+
+
+def priority_rank(user) -> int:
+    """
+    Ранг для сортировки "кто выше в списке" (участники сходки и т.п.) — чем
+    меньше число, тем выше. Max строго выше Pro, Pro выше Basic, любой
+    активный Premium выше обычных пользователей. Пробный период/рефералы
+    без явного tier читаются как Pro (см. effective_tier).
+    """
+    tier = effective_tier(user)
+    if tier is None:
+        return 3
+    return {TIER_MAX: 0, TIER_PRO: 1, TIER_BASIC: 2}.get(tier, 1)
+
+
+def coin_purchase_bonus_multiplier(user) -> float:
+    """
+    Множитель монет при покупке платных пакетов CarSpot Coins (не путать с
+    purchase_bonus_coins_for_tier — те монеты начисляются за оплату САМОГО
+    Premium; этот множитель наоборот увеличивает монеты, купленные ЗА
+    деньги отдельно). Pro/Max получают больше монет за те же деньги.
+    """
+    tier = effective_tier(user)
+    if tier == TIER_MAX:
+        return 1.25
+    if tier == TIER_PRO:
+        return 1.10
+    return 1.0

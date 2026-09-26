@@ -28,6 +28,10 @@ class CoinPurchaseVerifyRequest(BaseModel):
 class CoinPurchaseOut(BaseModel):
     balance: int
     credited: int
+    # На сколько % начислено больше базового номинала пакета — плюшка
+    # CarSpot Premium (Pro +10%, Max +25%, см.
+    # premium_tiers.coin_purchase_bonus_multiplier). 0 — обычный пользователь.
+    premium_bonus_percent: int = 0
 
 
 class CoinTransactionOut(BaseModel):
