@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_active_user
+from app.verification import recompute_is_verified
 from app.email_utils import send_password_reset_code
 from app.models.base import new_id, utcnow
 from app.models.user import PasswordResetToken, User
@@ -164,7 +165,13 @@ def login_form(
 
 
 @router.get("/me", response_model=UserMe, summary="Мой профиль")
-def read_me(current_user: User = Depends(get_current_active_user)):
+def read_me(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # Единственный критерий верификации, не завязанный ни на одно действие
+    # пользователя, — возраст аккаунта, поэтому пересчитываем и здесь: иначе
+    # галочка появилась бы только при следующем join/leave сходки, а не
+    # ровно тогда, когда исполнилось VERIFICATION_MIN_ACCOUNT_AGE_DAYS.
+    recompute_is_verified(db, current_user)
+    db.commit()
     return current_user
 
 

@@ -49,6 +49,14 @@ class Settings:
     MAX_CARS_PER_USER: int = _get_int("MAX_CARS_PER_USER", 10)
     DEFAULT_SEARCH_RADIUS_KM: float = float(os.getenv("DEFAULT_SEARCH_RADIUS_KM", "50"))
 
+    # --- Автоматическая верификация аккаунта (синяя галочка is_verified) ---
+    # Без ручной проверки документов/SMS — по активности: аккаунт не совсем
+    # новый + реально ходит на сходки + нет подтверждённых жалоб (см.
+    # app/verification.py). Пересчитывается точечно в app/api/events.py и
+    # app/api/admin.py, а не периодической задачей.
+    VERIFICATION_MIN_ACCOUNT_AGE_DAYS: int = _get_int("VERIFICATION_MIN_ACCOUNT_AGE_DAYS", 30)
+    VERIFICATION_MIN_EVENTS_ATTENDED: int = _get_int("VERIFICATION_MIN_EVENTS_ATTENDED", 3)
+
     # --- CarSpot Premium ---
     # Три уровня: Basic (дешевле, часть плюшек), Pro (был единственным
     # Premium раньше — тот же вход по цене, лимиты подняты) и Max (топ,

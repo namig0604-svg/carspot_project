@@ -17,6 +17,7 @@ from app.models.business import Business
 from app.models.report import REPORT_STATUSES, REPORT_TARGET_TYPES, Report
 from app.models.user import User
 from app.geocoding import reverse_geocode_address
+from app.verification import recompute_is_verified
 from app.ranks import ALL_RANKS, RANK_DEVELOPER, RANK_TECH_ADMIN
 from app.osm_import import run_osm_import
 from app.schemas.admin import (
@@ -116,6 +117,13 @@ def resolve_report(
     report.resolution_note = payload.resolution_note
     report.resolved_by_id = admin.id
     report.resolved_at = utcnow()
+
+    # Подтверждённая (resolved) жалоба на пользователя может снять с него
+    # галочку верификации — см. app/verification.py.
+    if report.target_type == "user":
+        target_user = db.query(User).filter(User.id == report.target_id).first()
+        recompute_is_verified(db, target_user)
+
     db.commit()
     db.refresh(report)
     return ReportOut.model_validate(report)
@@ -170,6 +178,7 @@ def ban_user(
 
     user.is_active = False
     user.ban_reason = payload.reason
+    recompute_is_verified(db, user)  # бан сразу снимает галочку верификации
     db.commit()
     db.refresh(user)
     return user
@@ -191,6 +200,7 @@ def unban_user(
 
     user.is_active = True
     user.ban_reason = None
+    recompute_is_verified(db, user)
     db.commit()
     db.refresh(user)
     return user

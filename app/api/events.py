@@ -9,6 +9,7 @@ from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from app import premium_tiers
+from app.verification import recompute_is_verified
 from app.api.clubs import refresh_events_count
 from app.config import settings
 from app.database import get_db
@@ -169,6 +170,7 @@ def create_event(
 
     current_user.events_created = (current_user.events_created or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
+    recompute_is_verified(db, current_user)
 
     if event.club_id:
         refresh_events_count(db, event.club_id)
@@ -617,6 +619,7 @@ def delete_event(
     if attendee_ids:
         for user in db.query(User).filter(User.id.in_(attendee_ids)).all():
             user.events_attended = max(0, (user.events_attended or 1) - 1)
+            recompute_is_verified(db, user)
 
     if event.club_id:
         # flush обязателен: refresh_events_count пересчитывает COUNT(...) новым
@@ -704,6 +707,7 @@ def join_event(
 
     event.participants_count = (event.participants_count or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
+    recompute_is_verified(db, current_user)
 
     # Добавляем в чат сходки
     room = get_or_create_event_room(db, event)
@@ -755,6 +759,7 @@ def leave_event(
     participant.status = "left"
     event.participants_count = max(0, (event.participants_count or 1) - 1)
     current_user.events_attended = max(0, (current_user.events_attended or 1) - 1)
+    recompute_is_verified(db, current_user)
 
     room = db.query(ChatRoom).filter(ChatRoom.event_id == event_id).first()
     if room and event.creator_id != current_user.id:
