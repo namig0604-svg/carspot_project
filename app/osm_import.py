@@ -13,10 +13,17 @@ OpenStreetMap (через публичный Overpass API) в каталог з�
 element_to_business_fields), которые не делают HTTP/DB-запросов — это
 позволяет их протестировать на примере JSON-ответа Overpass без сети,
 которая в CI/песочнице может быть недоступна.
+
+Импорт привязан к региону/местоположению пользователя (см.
+app/geocoding.reverse_geocode_country и авто-триггер в
+app/api/businesses.list_businesses): страна, для которой запускается импорт,
+определяется по GPS-координатам, которые уже присылает клиент, а не
+захардкожена на Грузию.
 """
 from typing import Optional
 
 import requests
+from sqlalchemy.orm import Session
 
 from app.config import settings
 
@@ -38,6 +45,38 @@ _OSM_QUERY_BLOCKS = [
 _TUNING_KEYWORDS = ("тюнинг", "tuning", "тюнинг-ателье", "чип-тюнинг", "chiptuning")
 _ELECTRIC_KEYWORDS = ("автоэлектрик", "электрик", "electric", "auto electric")
 _BODY_SHOP_KEYWORDS = ("кузов", "покрас", "bodywork", "body shop", "паинт", "paint")
+
+# ISO 3166-1 alpha-2 -> русское название страны. Ровно те 11 стран СНГ,
+# которые приложение поддерживает на клиенте (см. lib/utils/cities_data.dart)
+# — им и должен быть ограничен как ручной, так и авто-импорт из OSM.
+ISO2_TO_COUNTRY_RU = {
+    "RU": "Россия",
+    "UA": "Украина",
+    "BY": "Беларусь",
+    "KZ": "Казахстан",
+    "UZ": "Узбекистан",
+    "AZ": "Азербайджан",
+    "AM": "Армения",
+    "GE": "Грузия",
+    "TJ": "Таджикистан",
+    "TM": "Туркменистан",
+    "MD": "Молдова",
+}
+
+
+def country_name_from_iso2(country_iso2: str) -> str:
+    """ISO2 -> русское название страны из ISO2_TO_COUNTRY_RU, либо сам код
+    заглавными буквами, если страна не из поддерживаемого списка (на случай
+    ручного вызова эндпоинта админом с произвольным кодом)."""
+    return ISO2_TO_COUNTRY_RU.get((country_iso2 or "").upper(), (country_iso2 or "").upper())
+
+
+def is_supported_country(country_iso2: Optional[str]) -> bool:
+    """Входит ли код страны в список стран, которые реально поддерживает
+    приложение (см. ISO2_TO_COUNTRY_RU) — авто-импорт по геолокации
+    запускаем только для них, чтобы не дёргать Overpass для случайных
+    координат за пределами СНГ."""
+    return bool(country_iso2) and country_iso2.upper() in ISO2_TO_COUNTRY_RU
 
 
 def build_overpass_query(country_iso2: str = "GE", timeout_seconds: Optional[int] = None) -> str:
@@ -92,12 +131,16 @@ def _build_address(tags: dict) -> Optional[str]:
     return address or None
 
 
-def element_to_business_fields(el: dict) -> Optional[dict]:
+def element_to_business_fields(el: dict, country_iso2: str = "GE") -> Optional[dict]:
     """
     Один элемент ответа Overpass (`out center tags`) -> словарь полей для
     Business, либо None если элемент не подходит для импорта (нет имени
     или нет координат — например, заведение существует только как часть
     более крупного полигона без своей точки).
+
+    country_iso2 — код страны, для которой реально был выполнен запрос к
+    Overpass (см. fetch_overpass_elements) — раньше здесь было захардкожено
+    "Georgia" независимо от того, какую страну запрашивали.
     """
     tags = el.get("tags") or {}
     name = (tags.get("name") or tags.get("name:ru") or tags.get("name:en") or "").strip()
@@ -125,7 +168,7 @@ def element_to_business_fields(el: dict) -> Optional[dict]:
         "category": category,
         "description": None,
         "services": None,
-        "country": "Georgia",
+        "country": country_name_from_iso2(country_iso2),
         "city": (tags.get("addr:city") or "").strip()[:100] or None,
         "address": _build_address(tags),
         "latitude": float(lat),
@@ -153,3 +196,59 @@ def fetch_overpass_elements(country_iso2: str = "GE") -> list:
     resp.raise_for_status()
     data = resp.json()
     return data.get("elements", [])
+
+
+def run_osm_import(db: Session, country_iso2: str, dry_run: bool = False) -> dict:
+    """
+    Общая логика импорта/апдейта заведений из OSM для одной страны — вынесена
+    в отдельную функцию, чтобы её могли использовать и ручной админ-эндпоинт
+    (app/api/admin.import_osm_businesses), и авто-триггер по геолокации
+    пользователя (app/api/businesses.list_businesses). Идемпотентно: каждое
+    заведение хранит свой osm_id, повторный запуск обновит уже импортированные
+    записи, а не создаст дубликаты.
+
+    Возвращает {"found_in_osm", "created", "updated", "skipped"}. Может
+    бросить requests.RequestException — вызывающий код решает, как её подать.
+    """
+    from app.models.business import Business
+
+    elements = fetch_overpass_elements(country_iso2)
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for el in elements:
+        fields = element_to_business_fields(el, country_iso2)
+        if not fields:
+            skipped += 1
+            continue
+
+        osm_id = fields["osm_id"]
+        existing = db.query(Business).filter(Business.osm_id == osm_id).first()
+
+        if existing:
+            if not dry_run:
+                for key, value in fields.items():
+                    if key == "osm_id":
+                        continue
+                    # Не затираем то, что владелец/админ мог вручную заполнить
+                    # (описание, услуги, инста) — обновляем только "сырые" поля из OSM.
+                    if key in ("description", "services", "instagram") and getattr(existing, key):
+                        continue
+                    setattr(existing, key, value)
+            updated += 1
+        else:
+            if not dry_run:
+                db.add(Business(owner_id=None, **fields))
+            created += 1
+
+    if not dry_run:
+        db.commit()
+
+    return {
+        "found_in_osm": len(elements),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+    }

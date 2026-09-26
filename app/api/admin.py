@@ -18,7 +18,7 @@ from app.models.report import REPORT_STATUSES, REPORT_TARGET_TYPES, Report
 from app.models.user import User
 from app.geocoding import reverse_geocode_address
 from app.ranks import ALL_RANKS, RANK_DEVELOPER, RANK_TECH_ADMIN
-from app.osm_import import element_to_business_fields, fetch_overpass_elements
+from app.osm_import import run_osm_import
 from app.schemas.admin import (
     AdminGrantCoinsOut,
     AdminGrantCoinsRequest,
@@ -223,50 +223,18 @@ def import_osm_businesses(
     поддержку, если объявится).
     """
     try:
-        elements = fetch_overpass_elements(country)
+        result = run_osm_import(db, country, dry_run=dry_run)
     except requests.RequestException as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Не удалось получить данные с Overpass API: {exc}",
         )
 
-    created = 0
-    updated = 0
-    skipped = 0
-
-    for el in elements:
-        fields = element_to_business_fields(el)
-        if not fields:
-            skipped += 1
-            continue
-
-        osm_id = fields["osm_id"]
-        existing = db.query(Business).filter(Business.osm_id == osm_id).first()
-
-        if existing:
-            if not dry_run:
-                for key, value in fields.items():
-                    if key == "osm_id":
-                        continue
-                    # Не затираем то, что владелец/админ мог вручную заполнить
-                    # (описание, услуги, инста) — обновляем только "сырые" поля из OSM.
-                    if key in ("description", "services", "instagram") and getattr(existing, key):
-                        continue
-                    setattr(existing, key, value)
-            updated += 1
-        else:
-            if not dry_run:
-                db.add(Business(owner_id=None, **fields))
-            created += 1
-
-    if not dry_run:
-        db.commit()
-
     return OsmImportResult(
-        found_in_osm=len(elements),
-        created=created,
-        updated=updated,
-        skipped=skipped,
+        found_in_osm=result["found_in_osm"],
+        created=result["created"],
+        updated=result["updated"],
+        skipped=result["skipped"],
         dry_run=dry_run,
     )
 

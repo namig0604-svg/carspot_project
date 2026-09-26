@@ -1,20 +1,24 @@
 """
 Автосервисы и тюнинг-ателье: каталог, карта, отзывы, избранное.
 """
+import threading
+import time
 from datetime import timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app import premium_tiers
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.deps import Pagination, get_current_active_user, get_optional_user
+from app.geocoding import reverse_geocode_country
 from app.models.base import utcnow
 from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.user import User
+from app.osm_import import country_name_from_iso2, is_supported_country, run_osm_import
 from app.schemas.business import (
     BusinessCreate,
     BusinessDetail,
@@ -31,6 +35,68 @@ from app.services import InsufficientCoinsError, recalc_business_rating, spend_c
 from app.utils.geo import bounding_box, haversine_km
 
 router = APIRouter()
+
+# Парсинг заведений из OSM привязан к региону пользователя: когда каталог
+# запрашивают с реальными GPS-координатами (их уже присылает клиент — см.
+# determineCurrentPosition() в lib/utils/location_helper.dart) и для страны
+# пользователя ещё нет ни одного заведения, запускаем импорт из OSM в фоне
+# (см. _maybe_trigger_osm_import ниже). Не более одного одновременного
+# запуска на страну — простой in-memory guard достаточен, т.к. backend
+# работает одним процессом uvicorn (см. Procfile, без --workers).
+_AUTO_IMPORT_COOLDOWN_SECONDS = 600
+_auto_import_lock = threading.Lock()
+_auto_import_last_attempt: dict[str, float] = {}
+
+
+def _run_background_osm_import(country_iso2: str) -> None:
+    """Выполняется в фоне (BackgroundTasks) уже после отправки ответа клиенту
+    — поэтому открывает свою собственную сессию БД, т.к. db из Depends(get_db)
+    закрывается сразу после формирования ответа."""
+    if not SessionLocal:
+        return
+    db = SessionLocal()
+    try:
+        run_osm_import(db, country_iso2, dry_run=False)
+    except Exception as exc:  # сеть Overpass недоступна и т.п. — не критично
+        print(f"[osm_import] Авто-импорт для {country_iso2} не удался: {exc}")
+    finally:
+        db.close()
+
+
+def _maybe_trigger_osm_import(
+    background_tasks: BackgroundTasks,
+    db: Session,
+    latitude: Optional[float],
+    longitude: Optional[float],
+) -> None:
+    """Если пользователь передал реальные координаты и для его страны в
+    каталоге ещё нет ни одного заведения — запускаем импорт из OSM в фоне,
+    привязанный к региону, где пользователь реально находится (а не только
+    к вручную выбранной админом стране, как раньше)."""
+    if latitude is None or longitude is None:
+        return
+
+    country_iso2 = reverse_geocode_country(latitude, longitude)
+    if not is_supported_country(country_iso2):
+        return
+
+    with _auto_import_lock:
+        last_attempt = _auto_import_last_attempt.get(country_iso2, 0.0)
+        if time.time() - last_attempt < _AUTO_IMPORT_COOLDOWN_SECONDS:
+            return
+        _auto_import_last_attempt[country_iso2] = time.time()
+
+    country_name = country_name_from_iso2(country_iso2)
+    already_has_data = (
+        db.query(Business.id)
+        .filter(func.lower(Business.country) == country_name.lower())
+        .first()
+        is not None
+    )
+    if already_has_data:
+        return
+
+    background_tasks.add_task(_run_background_osm_import, country_iso2)
 
 
 def _recommended_score(
@@ -134,17 +200,20 @@ def create_business(
 
 @router.get("/", response_model=BusinessListResponse, summary="Каталог автосервисов и ателье")
 def list_businesses(
+    background_tasks: BackgroundTasks,
     q: Optional[str] = Query(None, description="Поиск по названию/описанию/услугам"),
     category: Optional[str] = None,
     country: Optional[str] = None,
     city: Optional[str] = None,
     sort: str = Query("recommended", description="recommended | rating | new | reviews | name"),
-    latitude: Optional[float] = Query(None, ge=-90, le=90, description="Широта пользователя (для sort=recommended)"),
-    longitude: Optional[float] = Query(None, ge=-180, le=180, description="Долгота пользователя (для sort=recommended)"),
+    latitude: Optional[float] = Query(None, ge=-90, le=90, description="Широта пользователя (для sort=recommended, а также для авто-импорта заведений из OSM по региону)"),
+    longitude: Optional[float] = Query(None, ge=-180, le=180, description="Долгота пользователя (для sort=recommended, а также для авто-импорта заведений из OSM по региону)"),
     page: Pagination = Depends(),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    _maybe_trigger_osm_import(background_tasks, db, latitude, longitude)
+
     query = db.query(Business).filter(Business.is_active.is_(True))
 
     if q:
