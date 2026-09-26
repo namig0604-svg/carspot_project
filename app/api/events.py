@@ -782,13 +782,18 @@ def list_participants(
     if not db.query(Event.id).filter(Event.id == event_id).first():
         raise HTTPException(status_code=404, detail="Событие не найдено")
 
+    # Premium-плюшка: подписчики поднимаются в начало списка участников
+    # (статуснее — тебя видят первым), внутри своей группы — по порядку
+    # присоединения, как и раньше.
+    premium_rank = case((User.premium_until > utcnow(), 0), else_=1)
     participants = (
         db.query(EventParticipant)
+        .join(User, EventParticipant.user_id == User.id)
         .filter(
             EventParticipant.event_id == event_id,
             EventParticipant.status.in_(("going", "maybe")),
         )
-        .order_by(EventParticipant.joined_at.asc())
+        .order_by(premium_rank, EventParticipant.joined_at.asc())
         .offset(page.offset)
         .limit(page.limit)
         .all()

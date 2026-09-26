@@ -8,14 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
 from app.deps import Pagination, get_current_active_user
 from app.models.base import new_id, utcnow
 from app.models.payment import PremiumPayment
 from app.models.user import User
 from app.schemas.payment import CheckoutOut, CheckoutRequest, GooglePlayVerifyRequest, PaymentStatusOut, PremiumPlanOut
-from app.services import extend_premium
+from app import premium_tiers
+from app.services import extend_premium, grant_coins
 from app.trybit_client import TrybitError, TrybitNotConfiguredError, create_invoice, verify_postback_token
 from app.google_play_client import (
     GooglePlayError,
@@ -217,10 +217,14 @@ async def trybit_webhook(request: Request, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.id == payment.user_id).first()
         if user:
             extend_premium(user, payment.days, tier=payment.tier)
-            if payment.tier == "max":
-                # Эксклюзив тарифа Max — бонусный XP при каждой настоящей
-                # оплате (и продлении), поверх обычного уровня.
-                user.xp = (user.xp or 0) + settings.PREMIUM_ULTRA_PURCHASE_BONUS_XP
+            # Бонусный XP и монеты при каждой настоящей оплате/продлении —
+            # растут по тарифу (см. app/premium_tiers.py).
+            bonus_xp = premium_tiers.purchase_bonus_xp_for_tier(payment.tier)
+            if bonus_xp:
+                user.xp = (user.xp or 0) + bonus_xp
+            bonus_coins = premium_tiers.purchase_bonus_coins_for_tier(payment.tier)
+            if bonus_coins:
+                grant_coins(db, user, bonus_coins, tx_type="premium_bonus", reference_id=payment.id)
 
         db.commit()
 
@@ -274,6 +278,7 @@ def verify_google_play_purchase(
         paid_at=utcnow(),
     )
     db.add(payment)
+    db.flush()  # получить payment.id до commit — нужен как reference_id бонуса монет
 
     # Google Play сам управляет сроком подписки (продления, отмены) — он
     # источник правды по дате окончания, поэтому выставляем premium_until
@@ -283,8 +288,12 @@ def verify_google_play_purchase(
         current_user.premium_until = result["expiry"].replace(tzinfo=None)
     else:
         extend_premium(current_user, plan["days"], tier=plan["tier"])
-    if plan["tier"] == "max":
-        current_user.xp = (current_user.xp or 0) + settings.PREMIUM_ULTRA_PURCHASE_BONUS_XP
+    bonus_xp = premium_tiers.purchase_bonus_xp_for_tier(plan["tier"])
+    if bonus_xp:
+        current_user.xp = (current_user.xp or 0) + bonus_xp
+    bonus_coins = premium_tiers.purchase_bonus_coins_for_tier(plan["tier"])
+    if bonus_coins:
+        grant_coins(db, current_user, bonus_coins, tx_type="premium_bonus", reference_id=payment.id)
 
     db.commit()
     db.refresh(payment)

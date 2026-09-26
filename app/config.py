@@ -54,10 +54,15 @@ class Settings:
     # Premium раньше — тот же вход по цене, лимиты подняты) и Max (топ,
     # самые жирные лимиты + эксклюзивные плюшки). Существующие подписчики
     # Pro ничего не теряют — только выигрывают от поднятых лимитов.
-    # Больше машин в гараже, закреплённые фото, добавление автосервисов.
-    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 30)  # Pro (было 25)
-    PREMIUM_BASIC_MAX_CARS_PER_USER: int = _get_int("PREMIUM_BASIC_MAX_CARS_PER_USER", 15)
-    PREMIUM_ULTRA_MAX_CARS_PER_USER: int = _get_int("PREMIUM_ULTRA_MAX_CARS_PER_USER", 60)  # тариф Max
+    #
+    # Лимиты по машинам/автосервисам сознательно НЕ огромные — реалистичные
+    # числа (у людей не по 25-60 машин и не по 8-25 автосервисов на одном
+    # аккаунте), это подстраховка от злоупотреблений, а не витрина Premium.
+    # Основная ценность тарифов — ниже: бонус монет/XP при каждой оплате,
+    # цветной статусный ник и приоритет в списке участников сходки.
+    PREMIUM_MAX_CARS_PER_USER: int = _get_int("PREMIUM_MAX_CARS_PER_USER", 18)  # Pro
+    PREMIUM_BASIC_MAX_CARS_PER_USER: int = _get_int("PREMIUM_BASIC_MAX_CARS_PER_USER", 12)
+    PREMIUM_ULTRA_MAX_CARS_PER_USER: int = _get_int("PREMIUM_ULTRA_MAX_CARS_PER_USER", 25)  # тариф Max
     PREMIUM_TRIAL_DAYS: int = _get_int("PREMIUM_TRIAL_DAYS", 14)
     # За каждые REFERRALS_PER_PREMIUM_MONTH приглашённых друзей — PREMIUM_MONTH_DAYS Premium.
     REFERRALS_PER_PREMIUM_MONTH: int = _get_int("REFERRALS_PER_PREMIUM_MONTH", 10)
@@ -71,14 +76,22 @@ class Settings:
     PREMIUM_INSIGHTS_LIMIT: int = _get_int("PREMIUM_INSIGHTS_LIMIT", 75)  # Pro (было 50)
     PREMIUM_BASIC_INSIGHTS_LIMIT: int = _get_int("PREMIUM_BASIC_INSIGHTS_LIMIT", 15)
     PREMIUM_ULTRA_INSIGHTS_LIMIT: int = _get_int("PREMIUM_ULTRA_INSIGHTS_LIMIT", 300)  # тариф Max
-    # Сколько автосервисов/ателье может добавить один владелец.
-    PREMIUM_PRO_MAX_BUSINESSES: int = _get_int("PREMIUM_PRO_MAX_BUSINESSES", 8)  # было 5
+    # Сколько автосервисов/ателье может добавить один владелец — реалистично
+    # мало (реальный бизнес редко держит больше 2-3 точек на одном аккаунте).
+    PREMIUM_PRO_MAX_BUSINESSES: int = _get_int("PREMIUM_PRO_MAX_BUSINESSES", 2)
     PREMIUM_BASIC_MAX_BUSINESSES: int = _get_int("PREMIUM_BASIC_MAX_BUSINESSES", 1)
-    PREMIUM_ULTRA_MAX_BUSINESSES: int = _get_int("PREMIUM_ULTRA_MAX_BUSINESSES", 25)  # тариф Max
-    # Бонусный XP, который начисляется при каждой настоящей оплате тарифа
-    # Max (при продлении — тоже) поверх обычного уровня, который считает
-    # фронтенд (см. gamification.dart) — эксклюзив тарифа Max.
+    PREMIUM_ULTRA_MAX_BUSINESSES: int = _get_int("PREMIUM_ULTRA_MAX_BUSINESSES", 3)  # тариф Max
+    # Бонусный XP и монеты CarSpot Coin, которые начисляются при КАЖДОЙ
+    # настоящей оплате/продлении тарифа (Trybit и Google Play — см.
+    # app/api/payments.py), поверх обычного уровня, который считает фронтенд
+    # (см. gamification.dart). Раньше был эксклюзивом тарифа Max — теперь
+    # получают все три тарифа, суммы растут по тарифу.
+    PREMIUM_BASIC_PURCHASE_BONUS_XP: int = _get_int("PREMIUM_BASIC_PURCHASE_BONUS_XP", 50)
+    PREMIUM_PRO_PURCHASE_BONUS_XP: int = _get_int("PREMIUM_PRO_PURCHASE_BONUS_XP", 100)
     PREMIUM_ULTRA_PURCHASE_BONUS_XP: int = _get_int("PREMIUM_ULTRA_PURCHASE_BONUS_XP", 200)
+    PREMIUM_BASIC_PURCHASE_BONUS_COINS: int = _get_int("PREMIUM_BASIC_PURCHASE_BONUS_COINS", 50)
+    PREMIUM_PRO_PURCHASE_BONUS_COINS: int = _get_int("PREMIUM_PRO_PURCHASE_BONUS_COINS", 150)
+    PREMIUM_ULTRA_PURCHASE_BONUS_COINS: int = _get_int("PREMIUM_ULTRA_PURCHASE_BONUS_COINS", 400)
 
     # --- Trybit (крипто-эквайринг для оплаты Premium, работает в СНГ) ---
     TRYBIT_SHOP_ID: str = os.getenv("TRYBIT_SHOP_ID", "")

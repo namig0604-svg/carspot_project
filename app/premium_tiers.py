@@ -94,3 +94,40 @@ def boost_duration_hours(user) -> int:
     if effective_tier(user) == TIER_MAX:
         return settings.PREMIUM_ULTRA_BOOST_DURATION_HOURS
     return settings.BOOST_DURATION_HOURS
+
+
+def purchase_bonus_xp_for_tier(tier: str | None) -> int:
+    """Бонусный XP при оплате/продлении — растёт по тарифу (см. app/api/payments.py)."""
+    if tier == TIER_MAX:
+        return settings.PREMIUM_ULTRA_PURCHASE_BONUS_XP
+    if tier == TIER_PRO:
+        return settings.PREMIUM_PRO_PURCHASE_BONUS_XP
+    if tier == TIER_BASIC:
+        return settings.PREMIUM_BASIC_PURCHASE_BONUS_XP
+    return 0
+
+
+def purchase_bonus_coins_for_tier(tier: str | None) -> int:
+    """Бонусные монеты CarSpot Coin при оплате/продлении — растут по тарифу."""
+    if tier == TIER_MAX:
+        return settings.PREMIUM_ULTRA_PURCHASE_BONUS_COINS
+    if tier == TIER_PRO:
+        return settings.PREMIUM_PRO_PURCHASE_BONUS_COINS
+    if tier == TIER_BASIC:
+        return settings.PREMIUM_BASIC_PURCHASE_BONUS_COINS
+    return 0
+
+
+def status_name_color_hex(tier: str | None) -> str | None:
+    """
+    Цвет ника в списках/чатах по тарифу — статусная плюшка, которую видят
+    остальные пользователи (см. UserPublic.premium_tier). None — обычный
+    пользователь, цвет не переопределяется на клиенте.
+    """
+    if tier == TIER_MAX:
+        return "#8E24AA"  # фиолетовый — топ-уровень
+    if tier == TIER_PRO:
+        return "#F9A825"  # золотой
+    if tier == TIER_BASIC:
+        return "#42A5F5"  # голубой
+    return None
