@@ -22,7 +22,7 @@ from app.schemas.rating import (
     UserRatingOut,
 )
 from app.schemas.user import UserPublic
-from app.services import recalc_event_rating, recalc_user_rating, users_by_ids
+from app.services import increment_challenge_progress, recalc_event_rating, recalc_user_rating, users_by_ids
 
 router = APIRouter()
 
@@ -75,6 +75,8 @@ def rate_event(
     else:
         rating = EventRating(user_id=current_user.id, **payload.model_dump())
         db.add(rating)
+        # В челлендж засчитываем только первую оценку события, не правки.
+        increment_challenge_progress(db, current_user.id, "rate_events")
 
     db.flush()
     recalc_event_rating(db, payload.event_id)

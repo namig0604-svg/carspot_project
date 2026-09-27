@@ -37,6 +37,7 @@ from app.services import (
     add_room_member,
     expire_ended_events,
     get_or_create_event_room,
+    increment_challenge_progress,
     notify,
     post_system_message,
     remove_room_member,
@@ -171,6 +172,8 @@ def create_event(
     current_user.events_created = (current_user.events_created or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
     recompute_is_verified(db, current_user)
+    increment_challenge_progress(db, current_user.id, "create_events")
+    increment_challenge_progress(db, current_user.id, "attend_events")
 
     if event.club_id:
         refresh_events_count(db, event.club_id)
@@ -708,6 +711,7 @@ def join_event(
     event.participants_count = (event.participants_count or 0) + 1
     current_user.events_attended = (current_user.events_attended or 0) + 1
     recompute_is_verified(db, current_user)
+    increment_challenge_progress(db, current_user.id, "attend_events")
 
     # Добавляем в чат сходки
     room = get_or_create_event_room(db, event)

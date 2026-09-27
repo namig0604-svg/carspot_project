@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.car import CarCreate, CarOut, CarUpdate, GarageOut
 from app.schemas.user import UserPublic
 from app.deps import get_current_active_user, get_optional_user
+from app.services import increment_challenge_progress
 
 router = APIRouter()
 
@@ -86,6 +87,7 @@ def create_car(
         _clear_other_primary(db, current_user.id, car.id)
 
     _refresh_cars_count(db, current_user.id)
+    increment_challenge_progress(db, current_user.id, "add_cars")
     db.commit()
     db.refresh(car)
     return car

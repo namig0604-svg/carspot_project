@@ -5,6 +5,7 @@
 from app.models.business import Business, BusinessFavorite, BusinessReview
 from app.models.booking import BusinessBooking
 from app.models.car import Car, CarLike
+from app.models.challenge import Challenge, ChallengeProgress
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.club import Club, ClubFavorite, ClubMember
 from app.models.coin_transaction import CoinTransaction
@@ -74,5 +75,7 @@ __all__ = [
     "PartListing",
     "RideOffer",
     "RideBooking",
+    "Challenge",
+    "ChallengeProgress",
 ]
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.base import utcnow
 from app.models.business import Business, BusinessReview
+from app.models.challenge import Challenge, ChallengeProgress
 from app.models.chat import ChatMember, ChatMessage, ChatRoom
 from app.models.event import Event
 from app.models.notification import Notification
@@ -415,3 +416,61 @@ def users_by_ids(db: Session, ids) -> dict:
         return {}
     rows = db.query(User).filter(User.id.in_(unique)).all()
     return {u.id: u for u in rows}
+
+
+# ─────────────────────── СЕЗОННЫЕ ЧЕЛЛЕНДЖИ ───────────────────────
+
+def increment_challenge_progress(db: Session, user_id: str, goal_type: str, amount: int = 1) -> None:
+    """
+    Продвигает прогресс пользователя по всем сейчас активным челленджам с
+    указанным goal_type. Вызывается точечно из места самого действия (см.
+    app/api/events.py, cars.py, ratings.py) — так же, как инкрементируются
+    events_attended и другие счётчики на User, а не пересчитывается задним
+    числом из истории.
+
+    Не бросает исключений наружу и не коммитит сама — ошибки здесь не
+    должны ронять основной запрос (челлендж вторичен по отношению к самому
+    действию), коммит делает вызывающий код вместе с основной операцией.
+    """
+    try:
+        now = utcnow()
+        challenges = (
+            db.query(Challenge)
+            .filter(
+                Challenge.goal_type == goal_type,
+                Challenge.is_active.is_(True),
+                Challenge.starts_at <= now,
+                Challenge.ends_at >= now,
+            )
+            .all()
+        )
+        if not challenges:
+            return
+
+        challenge_ids = [c.id for c in challenges]
+        existing = {
+            p.challenge_id: p
+            for p in db.query(ChallengeProgress).filter(
+                ChallengeProgress.challenge_id.in_(challenge_ids),
+                ChallengeProgress.user_id == user_id,
+            )
+        }
+
+        for challenge in challenges:
+            progress = existing.get(challenge.id)
+            if not progress:
+                progress = ChallengeProgress(
+                    challenge_id=challenge.id,
+                    user_id=user_id,
+                    progress=0,
+                )
+                db.add(progress)
+
+            if progress.completed_at:
+                continue  # уже выполнен — дальше не считаем
+
+            progress.progress = (progress.progress or 0) + amount
+            if progress.progress >= challenge.target:
+                progress.completed_at = now
+    except Exception as exc:  # noqa: BLE001
+        print(f"[CHALLENGES] Ошибка increment_challenge_progress: {exc}")
