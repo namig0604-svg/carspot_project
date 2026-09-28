@@ -203,6 +203,7 @@ from app.api import (  # noqa: E402
     coins,
     challenges,
     fuel_entries,
+    car_listings,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
@@ -231,6 +232,7 @@ app.include_router(car_documents.router, prefix="/api/car-documents", tags=["Д�
 app.include_router(car_expenses.router, prefix="/api/car-expenses", tags=["Расходы на авто"])
 app.include_router(hazards.router, prefix="/api/hazards", tags=["Дорожные опасности"])
 app.include_router(part_listings.router, prefix="/api/part-listings", tags=["Барахолка"])
+app.include_router(car_listings.router, prefix="/api/car-listings", tags=["Витрина: машина на продажу"])
 app.include_router(carpool.router, prefix="/api/carpool", tags=["Карпулинг"])
 app.include_router(coins.router, prefix="/api/coins", tags=["CarSpot Coins"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["Сезонные челленджи"])
