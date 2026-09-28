@@ -224,16 +224,46 @@ def recalc_business_rating(db: Session, business_id: str) -> None:
 
 def extend_premium(user: User, days: int, tier: Optional[str] = None) -> None:
     """
-    Продлевает Premium на `days` от текущего срока (или от сейчас, если уже
-    истёк). `tier` передают только настоящие покупки конкретного плана
-    ("basic"/"pro") — тогда он становится текущим активным уровнем.
-    Пробный период и награда за рефералов вызывают это без tier и не
-    трогают уже купленный уровень (см. app/premium_tiers.py).
+    Продлевает Premium на `days`. `tier` передают только настоящие покупки
+    конкретного плана ("basic"/"pro"/"max") — тогда он становится текущим
+    активным уровнем. Пробный период и награда за рефералов вызывают это без
+    tier и не трогают уже купленный уровень (см. app/premium_tiers.py).
+
+    Тарифы не должны конфликтовать друг с другом при апгрейде/даунгрейде:
+      - апгрейд на более высокий тариф (например Basic -> Max) — начинаем
+        СВЕЖИЙ срок нового тарифа от текущего момента; остаток дней старого,
+        более низкого тарифа сгорает (пользователь и так получает более
+        дорогой уровень, копить остаток было бы двойной выгодой и путаницей
+        в UI, где виден только один активный тариф).
+      - повторная покупка ТОГО ЖЕ тарифа — обычное продление (дни
+        складываются с остатком, как при любой подписке).
+      - покупка тарифа НИЖЕ уже активного — тариф не понижаем (человек не
+        должен случайно потерять уже купленный более высокий уровень), но
+        оплаченные дни всё равно добавляем к текущему сроку — деньги не
+        пропадают впустую.
     """
-    base = user.premium_until if user.premium_until and user.premium_until > utcnow() else utcnow()
-    user.premium_until = base + timedelta(days=days)
+    from app import premium_tiers as _pt
+
+    is_active = bool(user.premium_until and user.premium_until > utcnow())
+    base = user.premium_until if is_active else utcnow()
+
     if tier:
-        user.premium_tier = tier
+        current_level = _pt.TIER_LEVEL.get(user.premium_tier or "", 0) if is_active else 0
+        new_level = _pt.TIER_LEVEL.get(tier, 0)
+        if new_level > current_level:
+            # Апгрейд — свежий срок нового тарифа, остаток старого не копим.
+            user.premium_until = utcnow() + timedelta(days=days)
+            user.premium_tier = tier
+            return
+        if new_level == current_level:
+            user.premium_until = base + timedelta(days=days)
+            user.premium_tier = tier
+            return
+        # new_level < current_level: тариф не понижаем, дни добавляем.
+        user.premium_until = base + timedelta(days=days)
+        return
+
+    user.premium_until = base + timedelta(days=days)
 
 
 def grant_referral_premium_if_earned(db: Session, referrer_id: Optional[str]) -> None:
