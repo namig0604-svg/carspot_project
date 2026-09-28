@@ -155,4 +155,12 @@ class Settings:
     # чтобы уровень не "откатывался" назад, когда действие боста заканчивается).
     COIN_COST_XP_BOOST: int = _get_int("COIN_COST_XP_BOOST", 200)
     XP_BOOST_GRANT_AMOUNT: int = _get_int("XP_BOOST_GRANT_AMOUNT", 300)
+    # --- ИИ-диагностика по симптомам (CarSpot Premium) ---
+    # Ключ доступа к Anthropic Claude API. Получить: console.anthropic.com ->
+    # Settings -> API Keys. Без ключа фича отдаёт понятную ошибку 503, а не
+    # падает. Модель можно сменить переменной окружения ANTHROPIC_MODEL, если
+    # понадобится более/менее дорогая версия.
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
+
 settings = Settings()

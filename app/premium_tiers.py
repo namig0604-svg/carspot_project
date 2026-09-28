@@ -64,6 +64,11 @@ def can_view_insights(user) -> bool:
     return effective_tier(user) is not None
 
 
+def can_use_ai_diagnosis(user) -> bool:
+    """ИИ-диагностика по симптомам неисправности — любой активный уровень Premium."""
+    return effective_tier(user) is not None
+
+
 def can_pin_photo(user) -> bool:
     """Закрепление фото в начало галереи — Pro и Max."""
     return effective_tier(user) in (TIER_PRO, TIER_MAX)

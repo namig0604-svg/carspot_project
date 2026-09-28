@@ -206,6 +206,7 @@ from app.api import (  # noqa: E402
     car_listings,
     car_of_week,
     convoy,
+    ai_diagnosis,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
@@ -241,3 +242,4 @@ app.include_router(challenges.router, prefix="/api/challenges", tags=["Сезо�
 app.include_router(fuel_entries.router, prefix="/api/fuel-entries", tags=["Топливный трекер"])
 app.include_router(car_of_week.router, prefix="/api/car-of-week", tags=["Машина недели"])
 app.include_router(convoy.router, prefix="/api/convoy", tags=["Конвой-режим"])
+app.include_router(ai_diagnosis.router, prefix="/api/ai-diagnosis", tags=["ИИ-диагностика"])
