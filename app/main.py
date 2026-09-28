@@ -57,6 +57,23 @@ async def lifespan(app: FastAPI):
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
+    # --- Проверка небезопасных значений по умолчанию ---
+    # Ничего не блокируем (чтобы не уронить уже работающий деплой), только
+    # громко предупреждаем в логах — значения секретов НИКОГДА не печатаем,
+    # только факт, что они остались значениями по умолчанию из кода.
+    if settings.SECRET_KEY == "change-me-in-production-please-32-chars-min":
+        print(
+            "[SECURITY] ВНИМАНИЕ: SECRET_KEY не задан в переменных окружения — "
+            "используется значение по умолчанию из кода. Это позволяет подделывать "
+            "JWT-токены. Задайте SECRET_KEY (длинная случайная строка) в Railway."
+        )
+    if settings.DOCS_PASSWORD == "Kalicto300":
+        print(
+            "[SECURITY] ВНИМАНИЕ: DOCS_PASSWORD не изменён с значения по умолчанию — "
+            "/docs и /redoc фактически защищены общеизвестным паролем. Задайте "
+            "DOCS_USERNAME/DOCS_PASSWORD в Railway."
+        )
+
     # Фоновая проверка истекающих документов/страховок (напоминания) — см.
     # check_document_reminders/_document_reminder_loop в app/services.py.
     # Ссылку на задачу держим на app.state, иначе её может забрать GC.
@@ -93,6 +110,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Практическое усиление безопасности (см. app/security_middleware.py) ---
+# Порядок добавления не критичен — каждый middleware независим, но чем
+# раньше отсекаем перегруженный/слишком большой запрос, тем меньше работы
+# уходит в пустую (без реального анти-DDoS на уровне инфраструктуры это не
+# панацея — см. SECURITY_AUDIT.md).
+from app.security_middleware import (
+    MaxBodySizeMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
+
+app.add_middleware(MaxBodySizeMiddleware, max_bytes=20 * 1024 * 1024)  # 20 МБ — с запасом над MAX_UPLOAD_SIZE
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 _docs_security = HTTPBasic()
 
