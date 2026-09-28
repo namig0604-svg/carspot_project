@@ -75,6 +75,14 @@ class User(Base):
     # статистики (lib/utils/gamification.dart), а не заменяет его — так
     # уровень не может "разъехаться" между покупкой и реальными достижениями.
     xp = Column(Integer, default=0, nullable=False)
+
+    # --- Ежедневный вход (CarSpot Daily Login) ---
+    # daily_streak_count — сколько дней подряд ЗАБРАНО (1..7), сбрасывается
+    # на 1, если пропущен день. last_daily_claim_at — дата последнего забора,
+    # по ней определяем "уже забрано сегодня" / "продолжение стрика" / "стрик
+    # прервался". См. app/api/daily_login.py.
+    daily_streak_count = Column(Integer, default=0, nullable=False)
+    last_daily_claim_at = Column(DateTime, nullable=True)
     profile_boosted_until = Column(DateTime, nullable=True)
     equipped_frame = Column(String(40), nullable=True)
     equipped_badge = Column(String(40), nullable=True)
