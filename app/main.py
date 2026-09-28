@@ -6,6 +6,7 @@ CarSpot API — приложение для автомобильных сход�
 
 Документация: /docs
 """
+import asyncio
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -56,8 +57,16 @@ async def lifespan(app: FastAPI):
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
+    # Фоновая проверка истекающих документов/страховок (напоминания) — см.
+    # check_document_reminders/_document_reminder_loop в app/services.py.
+    # Ссылку на задачу держим на app.state, иначе её может забрать GC.
+    from app.services import _document_reminder_loop
+
+    app.state.document_reminder_task = asyncio.create_task(_document_reminder_loop())
+
     print("[APP] Готово к работе")
     yield
+    app.state.document_reminder_task.cancel()
     print("[APP] Остановка")
 
 

@@ -2,6 +2,8 @@
 Общая бизнес-логика, которую используют несколько роутеров.
 Здесь нет HTTP — только работа с БД.
 """
+import asyncio
+import math
 from datetime import timedelta
 from typing import Optional
 
@@ -474,3 +476,100 @@ def increment_challenge_progress(db: Session, user_id: str, goal_type: str, amou
                 progress.completed_at = now
     except Exception as exc:  # noqa: BLE001
         print(f"[CHALLENGES] Ошибка increment_challenge_progress: {exc}")
+
+
+# ─────────────────── НАПОМИНАНИЯ О ДОКУМЕНТАХ/СТРАХОВКЕ ───────────────────
+
+# За сколько дней до истечения срока документа (СТС, ОСАГО/КАСКО, техосмотр,
+# права — см. DOCUMENT_TYPES в app/models/car_document.py) присылать
+# уведомление. Одно уведомление на документ — не окно повторных напоминаний.
+DOCUMENT_REMINDER_WINDOW_DAYS = 14
+
+# Как часто фоновый цикл (см. _document_reminder_loop ниже, запускается из
+# lifespan в app/main.py) перепроверяет документы. Приложение однопроцессное
+# (Railway), выделенного планировщика задач нет — это самый простой способ
+# получить периодическую проверку без внешней инфраструктуры.
+DOCUMENT_REMINDER_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
+
+
+def check_document_reminders(db: Session) -> int:
+    """
+    Разово проверяет документы с истекающим (или уже истёкшим) сроком
+    действия и создаёт по одному уведомлению на документ через notify().
+    Документ помечается reminder_sent="yes" сразу после отправки — повторно
+    не напоминаем про один и тот же документ. Возвращает число отправленных
+    уведомлений (для логов и тестов).
+    """
+    from app.models.car import Car
+    from app.models.car_document import CarDocument  # локальный импорт — без цикла
+
+    now = utcnow()
+    deadline = now + timedelta(days=DOCUMENT_REMINDER_WINDOW_DAYS)
+
+    docs = (
+        db.query(CarDocument)
+        .filter(
+            CarDocument.reminder_sent == "no",
+            CarDocument.expires_at.isnot(None),
+            CarDocument.expires_at <= deadline,
+        )
+        .all()
+    )
+    if not docs:
+        return 0
+
+    car_ids = list({d.car_id for d in docs})
+    cars_by_id = {c.id: c for c in db.query(Car).filter(Car.id.in_(car_ids)).all()}
+
+    sent = 0
+    for doc in docs:
+        car = cars_by_id.get(doc.car_id)
+        car_label = f" ({car.make} {car.model})" if car else ""
+        seconds_left = (doc.expires_at - now).total_seconds()
+
+        if seconds_left < 0:
+            message = f"Срок действия «{doc.title}»{car_label} истёк"
+        else:
+            # Округляем вверх — "истекает через 5 дн." показываем весь день,
+            # пока не останется меньше суток (тогда — "сегодня").
+            days_left = math.ceil(seconds_left / 86400)
+            if days_left <= 0:
+                message = f"Срок действия «{doc.title}»{car_label} истекает сегодня"
+            else:
+                message = f"Срок действия «{doc.title}»{car_label} истекает через {days_left} дн."
+
+        notify(
+            db,
+            user_id=doc.user_id,
+            type="document_expiring",
+            message=message,
+            target_type="car_document",
+            target_id=doc.id,
+        )
+        doc.reminder_sent = "yes"
+        sent += 1
+
+    db.commit()
+    return sent
+
+
+async def _document_reminder_loop() -> None:
+    """
+    Фоновый цикл проверки истекающих документов — запускается один раз из
+    lifespan в app/main.py (asyncio.create_task). Первая проверка сразу при
+    старте приложения, дальше — каждые DOCUMENT_REMINDER_CHECK_INTERVAL_SECONDS.
+    """
+    from app.database import SessionLocal
+
+    while True:
+        if SessionLocal:
+            db = SessionLocal()
+            try:
+                sent = check_document_reminders(db)
+                if sent:
+                    print(f"[REMINDERS] Отправлено напоминаний о документах: {sent}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"[REMINDERS] Ошибка проверки документов: {exc}")
+            finally:
+                db.close()
+        await asyncio.sleep(DOCUMENT_REMINDER_CHECK_INTERVAL_SECONDS)
