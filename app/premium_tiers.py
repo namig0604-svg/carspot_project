@@ -65,8 +65,13 @@ def can_view_insights(user) -> bool:
 
 
 def can_use_ai_diagnosis(user) -> bool:
-    """ИИ-диагностика по симптомам неисправности — любой активный уровень Premium."""
-    return effective_tier(user) is not None
+    """ИИ-диагностика по симптомам неисправности — только CarSpot Max."""
+    return meets_tier(user, TIER_MAX)
+
+
+def can_use_car_report(user) -> bool:
+    """PDF-отчёт об авто (сервисный журнал/расходы/документы/топливо одним файлом) — только CarSpot Max."""
+    return meets_tier(user, TIER_MAX)
 
 
 def can_pin_photo(user) -> bool:
