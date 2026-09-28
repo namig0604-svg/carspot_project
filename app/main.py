@@ -60,13 +60,16 @@ async def lifespan(app: FastAPI):
     # Фоновая проверка истекающих документов/страховок (напоминания) — см.
     # check_document_reminders/_document_reminder_loop в app/services.py.
     # Ссылку на задачу держим на app.state, иначе её может забрать GC.
-    from app.services import _document_reminder_loop
+    from app.services import _document_reminder_loop, _scheduled_challenges_loop
 
     app.state.document_reminder_task = asyncio.create_task(_document_reminder_loop())
+    # Автопубликация еженедельных/ежемесячных челленджей — см. app/services.py.
+    app.state.scheduled_challenges_task = asyncio.create_task(_scheduled_challenges_loop())
 
     print("[APP] Готово к работе")
     yield
     app.state.document_reminder_task.cancel()
+    app.state.scheduled_challenges_task.cancel()
     print("[APP] Остановка")
 
 

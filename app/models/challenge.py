@@ -47,6 +47,17 @@ class Challenge(Base):
     # снять челлендж с публикации, не трогая уже сохранённый прогресс.
     is_active = Column(Boolean, default=True, nullable=False)
 
+    # kind: "manual" (создан администрацией через POST /api/challenges, как
+    # раньше) | "weekly" | "monthly" (автоматически опубликован фоновым
+    # циклом _scheduled_challenges_loop из годового календаря — см.
+    # WEEKLY_CHALLENGE_CALENDAR/MONTHLY_CHALLENGE_CALENDAR в app/services.py).
+    # period_key — ключ периода для kind="weekly"/"monthly", например
+    # "2026-W03" или "2026-01": не даёт опубликовать один и тот же
+    # автоматический челлендж дважды (проверяется в приложении перед
+    # созданием — см. ensure_scheduled_challenges_published).
+    kind = Column(String(10), default="manual", nullable=False)
+    period_key = Column(String(20), nullable=True, index=True)
+
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 

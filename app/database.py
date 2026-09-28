@@ -112,6 +112,8 @@ def _ensure_columns() -> None:
         ("premium_payments", "tier", "VARCHAR(10) DEFAULT 'pro'"),
         ("users", "daily_streak_count", "INTEGER DEFAULT 0"),
         ("users", "last_daily_claim_at", "TIMESTAMP"),
+        ("challenges", "kind", "VARCHAR(10) DEFAULT 'manual'"),
+        ("challenges", "period_key", "VARCHAR(20)"),
     ]
     try:
         with engine.connect() as conn:

@@ -4,7 +4,7 @@
 """
 import asyncio
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
@@ -506,6 +506,183 @@ def increment_challenge_progress(db: Session, user_id: str, goal_type: str, amou
                 progress.completed_at = now
     except Exception as exc:  # noqa: BLE001
         print(f"[CHALLENGES] Ошибка increment_challenge_progress: {exc}")
+
+
+# ─────────────────── АВТОПУБЛИКАЦИЯ СЕЗОННЫХ ЧЕЛЛЕНДЖЕЙ ───────────────────
+# Годовой календарь еженедельных (52) и ежемесячных (12) челленджей —
+# публикуются автоматически фоновым циклом (_scheduled_challenges_loop,
+# запускается из lifespan в app/main.py), без участия администрации.
+# Метрики — те же 4 goal_type, что уже используются во всём проекте (см.
+# GOAL_TYPES в app/models/challenge.py): прогресс по ним уже инкрементируется
+# точечно в app/api/events.py, cars.py, ratings.py — подключать ничего
+# дополнительно не нужно, достаточно самого факта существования Challenge.
+
+_WEEKLY_GOAL_ORDER = (
+    "attend_events", "rate_events", "create_events",
+    "attend_events", "rate_events", "add_cars",
+)
+
+_WEEKLY_TITLES = {
+    "attend_events": ["Загляни на сходку", "Посети встречу клуба", "На сходку на этой неделе", "Не пропусти встречу"],
+    "rate_events": ["Оцени сходку", "Оставь оценку организатору", "Поделись впечатлением", "Оцени, как прошло"],
+    "create_events": ["Организуй сходку", "Собери своих на встречу", "Стань организатором недели", "Заяви свою сходку"],
+    "add_cars": ["Пополни гараж", "Добавь машину в гараж", "Новое авто в профиле", "Расширь свой гараж"],
+}
+
+_MONTHLY_GOAL_ORDER = ("attend_events", "create_events", "rate_events", "add_cars")
+
+_MONTHLY_TITLES = {
+    "attend_events": "Марафон встреч месяца",
+    "create_events": "Организатор месяца",
+    "rate_events": "Голос сообщества месяца",
+    "add_cars": "Пополнение гаража месяца",
+}
+
+_MONTH_NAMES_GENITIVE = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def _weekly_challenge_spec(week_index: int) -> dict:
+    """week_index — 0-based индекс недели с начала годового плана. Заворачи-
+    вается по модулю 52, поэтому календарь работает без переиздания и на
+    второй год (и на редкую 53-ю ISO-неделю)."""
+    i = week_index % 52
+    goal_type = _WEEKLY_GOAL_ORDER[i % len(_WEEKLY_GOAL_ORDER)]
+    titles = _WEEKLY_TITLES[goal_type]
+    title = titles[i % len(titles)]
+    # Вторая половина года — цель чуть выше для "посети"/"оцени" (нарастание сложности).
+    target = 2 if goal_type in ("attend_events", "rate_events") and i >= 26 else 1
+    xp_reward = round(50 + (100 - 50) * i / 51)
+    coin_reward = round(30 + (60 - 30) * i / 51)
+    return {
+        "title": f"Неделя {i + 1}: {title}",
+        "goal_type": goal_type,
+        "target": target,
+        "xp_reward": xp_reward,
+        "coin_reward": coin_reward,
+    }
+
+
+def _monthly_challenge_spec(month_index: int) -> dict:
+    """month_index — 0-based индекс календарного месяца (0 = январь)."""
+    i = month_index % 12
+    goal_type = _MONTHLY_GOAL_ORDER[i % len(_MONTHLY_GOAL_ORDER)]
+    base_title = _MONTHLY_TITLES[goal_type]
+    if goal_type in ("attend_events", "rate_events"):
+        target = 3 if i < 6 else 4
+    elif goal_type == "create_events":
+        target = 1 if i < 6 else 2
+    else:
+        target = 1
+    xp_reward = round(200 + (400 - 200) * i / 11)
+    coin_reward = round(150 + (300 - 150) * i / 11)
+    return {
+        "title": f"{base_title} — {_MONTH_NAMES_GENITIVE[i]}",
+        "goal_type": goal_type,
+        "target": target,
+        "xp_reward": xp_reward,
+        "coin_reward": coin_reward,
+    }
+
+
+def ensure_scheduled_challenges_published(db: Session) -> int:
+    """
+    Проверяет, опубликован ли уже автоматический челлендж на текущую
+    ISO-неделю и на текущий календарный месяц — если нет, создаёт из
+    заранее расписанного годового календаря (см. _weekly_challenge_spec /
+    _monthly_challenge_spec выше). Идемпотентна — безопасно вызывать
+    периодически (см. _scheduled_challenges_loop). Возвращает, сколько
+    новых челленджей создано (0, 1 или 2).
+    """
+    created = 0
+    now = utcnow()
+
+    iso_year, iso_week, _ = now.isocalendar()
+    week_key = f"{iso_year}-W{iso_week:02d}"
+    exists_weekly = (
+        db.query(Challenge)
+        .filter(Challenge.kind == "weekly", Challenge.period_key == week_key)
+        .first()
+    )
+    if not exists_weekly:
+        week_start = datetime.combine(now.date() - timedelta(days=now.weekday()), datetime.min.time())
+        week_end = week_start + timedelta(days=7) - timedelta(seconds=1)
+        spec = _weekly_challenge_spec(iso_week - 1)
+        db.add(Challenge(
+            title=spec["title"],
+            goal_type=spec["goal_type"],
+            target=spec["target"],
+            xp_reward=spec["xp_reward"],
+            coin_reward=spec["coin_reward"],
+            starts_at=week_start,
+            ends_at=week_end,
+            is_active=True,
+            kind="weekly",
+            period_key=week_key,
+        ))
+        created += 1
+
+    month_key = f"{now.year}-{now.month:02d}"
+    exists_monthly = (
+        db.query(Challenge)
+        .filter(Challenge.kind == "monthly", Challenge.period_key == month_key)
+        .first()
+    )
+    if not exists_monthly:
+        month_start = datetime(now.year, now.month, 1)
+        if now.month == 12:
+            next_month_start = datetime(now.year + 1, 1, 1)
+        else:
+            next_month_start = datetime(now.year, now.month + 1, 1)
+        month_end = next_month_start - timedelta(seconds=1)
+        spec = _monthly_challenge_spec(now.month - 1)
+        db.add(Challenge(
+            title=spec["title"],
+            goal_type=spec["goal_type"],
+            target=spec["target"],
+            xp_reward=spec["xp_reward"],
+            coin_reward=spec["coin_reward"],
+            starts_at=month_start,
+            ends_at=month_end,
+            is_active=True,
+            kind="monthly",
+            period_key=month_key,
+        ))
+        created += 1
+
+    if created:
+        db.commit()
+    return created
+
+
+# Раз в 6 часов достаточно — публикация привязана к календарным границам
+# (неделя/месяц), а не к точному времени, важна только сама периодичность
+# проверки (как и с напоминаниями о документах ниже).
+SCHEDULED_CHALLENGES_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
+
+
+async def _scheduled_challenges_loop() -> None:
+    """Фоновый цикл автопубликации сезонных челленджей — запускается один
+    раз из lifespan в app/main.py (asyncio.create_task). Первая проверка
+    сразу при старте (чтобы после деплоя не ждать 6 часов первую неделю),
+    дальше — раз в SCHEDULED_CHALLENGES_CHECK_INTERVAL_SECONDS."""
+    from app.database import SessionLocal
+
+    while True:
+        if SessionLocal:
+            db = SessionLocal()
+            try:
+                created = ensure_scheduled_challenges_published(db)
+                if created:
+                    print(f"[CHALLENGES] Автоматически опубликовано челленджей: {created}")
+            except Exception as exc:
+                print(f"[CHALLENGES] Ошибка ensure_scheduled_challenges_published: {exc}")
+                db.rollback()
+            finally:
+                db.close()
+        await asyncio.sleep(SCHEDULED_CHALLENGES_CHECK_INTERVAL_SECONDS)
 
 
 # ─────────────────── НАПОМИНАНИЯ О ДОКУМЕНТАХ/СТРАХОВКЕ ───────────────────
