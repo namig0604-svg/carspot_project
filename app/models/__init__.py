@@ -25,6 +25,7 @@ from app.models.parking import ParkingSpot
 from app.models.maintenance import MaintenanceRecord
 from app.models.car_document import CarDocument
 from app.models.car_expense import CarExpense
+from app.models.fuel_entry import FuelEntry
 from app.models.hazard import RoadHazard, RoadHazardVote
 from app.models.part_listing import PartListing
 from app.models.ride_pool import RideOffer, RideBooking
@@ -70,6 +71,7 @@ __all__ = [
     "MaintenanceRecord",
     "CarDocument",
     "CarExpense",
+    "FuelEntry",
     "RoadHazard",
     "RoadHazardVote",
     "PartListing",

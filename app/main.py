@@ -193,6 +193,7 @@ from app.api import (  # noqa: E402
     carpool,
     coins,
     challenges,
+    fuel_entries,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
@@ -224,3 +225,4 @@ app.include_router(part_listings.router, prefix="/api/part-listings", tags=["Б�
 app.include_router(carpool.router, prefix="/api/carpool", tags=["Карпулинг"])
 app.include_router(coins.router, prefix="/api/coins", tags=["CarSpot Coins"])
 app.include_router(challenges.router, prefix="/api/challenges", tags=["Сезонные челленджи"])
+app.include_router(fuel_entries.router, prefix="/api/fuel-entries", tags=["Топливный трекер"])
