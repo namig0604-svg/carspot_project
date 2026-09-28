@@ -28,6 +28,7 @@ from app.models.car_expense import CarExpense
 from app.models.fuel_entry import FuelEntry
 from app.models.hazard import RoadHazard, RoadHazardVote
 from app.models.car_listing import CarListing
+from app.models.car_of_week import CarOfWeekEntry, CarOfWeekVote
 from app.models.part_listing import PartListing
 from app.models.ride_pool import RideOffer, RideBooking
 
@@ -76,6 +77,8 @@ __all__ = [
     "RoadHazard",
     "RoadHazardVote",
     "CarListing",
+    "CarOfWeekEntry",
+    "CarOfWeekVote",
     "PartListing",
     "RideOffer",
     "RideBooking",
