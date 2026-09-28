@@ -16,6 +16,7 @@ from app.database import SessionLocal, get_db
 from app.deps import get_current_active_user
 from app.models.base import utcnow
 from app.models.club import ClubMember
+from app.models.convoy import shares_active_convoy
 from app.models.friendship import Friendship
 from app.models.user import User
 from app.security import decode_access_token
@@ -81,6 +82,10 @@ def _shares_club(db: Session, a: str, b: str) -> bool:
 def _visible_to(db: Session, viewer_id: str, target: User) -> bool:
     """Видна ли метка target'а пользователю viewer_id, по его настройке приватности."""
     if target.id == viewer_id:
+        return True
+    # Участники одного активного конвоя видят друг друга всегда, независимо
+    # от обычной настройки приватности — это и есть смысл конвой-режима.
+    if shares_active_convoy(db, viewer_id, target.id):
         return True
     visibility = target.location_visibility or "everyone"
     if visibility == "everyone":
