@@ -74,6 +74,11 @@ def can_use_car_report(user) -> bool:
     return meets_tier(user, TIER_MAX)
 
 
+def can_use_maintenance_forecast(user) -> bool:
+    """Прогноз следующего ТО по истории сервисного дневника — только CarSpot Max."""
+    return meets_tier(user, TIER_MAX)
+
+
 def can_pin_photo(user) -> bool:
     """Закрепление фото в начало галереи — Pro и Max."""
     return effective_tier(user) in (TIER_PRO, TIER_MAX)

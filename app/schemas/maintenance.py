@@ -56,3 +56,25 @@ class MaintenanceOut(BaseModel):
 class MaintenanceListResponse(BaseModel):
     total: int
     items: List[MaintenanceOut]
+
+
+class MaintenanceForecastItem(BaseModel):
+    """Прогноз по одному типу ТО: когда/на каком пробеге предположительно
+    понадобится следующее обслуживание этого типа."""
+
+    type: str
+    last_done_at: datetime
+    last_mileage_km: Optional[int] = None
+    predicted_next_at: Optional[datetime] = None
+    predicted_next_mileage_km: Optional[int] = None
+    # "manual" — взято из next_due_at/next_due_mileage_km, которые пользователь
+    # сам указал в последней записи этого типа; "estimated" — посчитано по
+    # среднему интервалу между прошлыми записями того же типа.
+    source: str
+    # "ok" | "soon" (в пределах 30 дней или 1000 км) | "overdue"
+    urgency: str
+
+
+class MaintenanceForecastResponse(BaseModel):
+    current_mileage_km: Optional[int] = None
+    items: List[MaintenanceForecastItem]
