@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, Column, DateTime, Index, String, UniqueConstrain
 from app.database import Base
 from app.models.base import new_id, utcnow
 
-# friend_request / friend_accepted / profile_like / event_join / comment_event / comment_photo / document_expiring
+# friend_request / friend_accepted / profile_like / event_join / comment_event / comment_photo / document_expiring / new_challenge
 NOTIFICATION_TYPES = (
     "friend_request",
     "friend_accepted",
@@ -13,6 +13,7 @@ NOTIFICATION_TYPES = (
     "comment_event",
     "comment_photo",
     "document_expiring",
+    "new_challenge",
 )
 
 

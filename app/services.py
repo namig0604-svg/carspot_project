@@ -355,6 +355,7 @@ _PUSH_TITLES = {
     "event_join": "🏁 Новый участник",
     "comment_event": "💬 Новый комментарий",
     "comment_photo": "💬 Новый комментарий",
+    "new_challenge": "🏆 Новый челлендж",
 }
 
 
@@ -587,17 +588,51 @@ def _monthly_challenge_spec(month_index: int) -> dict:
     }
 
 
+def _notify_all_users_new_challenge(db: Session, spec: dict, challenge_id: str) -> None:
+    """
+    Push + запись в ленту уведомлений всем активным пользователям про только
+    что автоматически опубликованный челлендж (см.
+    ensure_scheduled_challenges_published ниже). Best-effort — notify() сама
+    не бросает исключений наружу за отдельного пользователя (см. выше), но
+    на всякий случай оборачиваем ещё раз, чтобы ошибка на одном аккаунте не
+    прервала рассылку остальным. При росте базы пользователей это может
+    стать медленным местом (по одному INSERT+push на пользователя) — пока
+    для масштаба CarSpot это не проблема, тот же подход используется и в
+    других местах этого файла.
+    """
+    message = (
+        f"{spec['title']} — выполни и получи {spec['xp_reward']} XP "
+        f"и {spec['coin_reward']} монет"
+    )
+    user_ids = [uid for (uid,) in db.query(User.id).filter(User.is_active.is_(True)).all()]
+    for user_id in user_ids:
+        try:
+            notify(
+                db,
+                user_id=user_id,
+                type="new_challenge",
+                message=message,
+                target_type="challenge",
+                target_id=challenge_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[CHALLENGES] Ошибка уведомления пользователя {user_id}: {exc}")
+    db.commit()
+
+
 def ensure_scheduled_challenges_published(db: Session) -> int:
     """
     Проверяет, опубликован ли уже автоматический челлендж на текущую
     ISO-неделю и на текущий календарный месяц — если нет, создаёт из
     заранее расписанного годового календаря (см. _weekly_challenge_spec /
-    _monthly_challenge_spec выше). Идемпотентна — безопасно вызывать
-    периодически (см. _scheduled_challenges_loop). Возвращает, сколько
-    новых челленджей создано (0, 1 или 2).
+    _monthly_challenge_spec выше) и рассылает push-уведомление всем
+    пользователям (см. _notify_all_users_new_challenge). Идемпотентна —
+    безопасно вызывать периодически (см. _scheduled_challenges_loop).
+    Возвращает, сколько новых челленджей создано (0, 1 или 2).
     """
     created = 0
     now = utcnow()
+    newly_published: list[tuple[dict, str]] = []
 
     iso_year, iso_week, _ = now.isocalendar()
     week_key = f"{iso_year}-W{iso_week:02d}"
@@ -610,7 +645,7 @@ def ensure_scheduled_challenges_published(db: Session) -> int:
         week_start = datetime.combine(now.date() - timedelta(days=now.weekday()), datetime.min.time())
         week_end = week_start + timedelta(days=7) - timedelta(seconds=1)
         spec = _weekly_challenge_spec(iso_week - 1)
-        db.add(Challenge(
+        challenge = Challenge(
             title=spec["title"],
             goal_type=spec["goal_type"],
             target=spec["target"],
@@ -621,7 +656,10 @@ def ensure_scheduled_challenges_published(db: Session) -> int:
             is_active=True,
             kind="weekly",
             period_key=week_key,
-        ))
+        )
+        db.add(challenge)
+        db.flush()
+        newly_published.append((spec, challenge.id))
         created += 1
 
     month_key = f"{now.year}-{now.month:02d}"
@@ -638,7 +676,7 @@ def ensure_scheduled_challenges_published(db: Session) -> int:
             next_month_start = datetime(now.year, now.month + 1, 1)
         month_end = next_month_start - timedelta(seconds=1)
         spec = _monthly_challenge_spec(now.month - 1)
-        db.add(Challenge(
+        challenge = Challenge(
             title=spec["title"],
             goal_type=spec["goal_type"],
             target=spec["target"],
@@ -649,11 +687,16 @@ def ensure_scheduled_challenges_published(db: Session) -> int:
             is_active=True,
             kind="monthly",
             period_key=month_key,
-        ))
+        )
+        db.add(challenge)
+        db.flush()
+        newly_published.append((spec, challenge.id))
         created += 1
 
     if created:
         db.commit()
+        for spec, challenge_id in newly_published:
+            _notify_all_users_new_challenge(db, spec, challenge_id)
     return created
 
 
