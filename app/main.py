@@ -243,6 +243,7 @@ from app.api import (  # noqa: E402
     convoy,
     ai_diagnosis,
     daily_login,
+    trips,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
@@ -280,3 +281,4 @@ app.include_router(car_of_week.router, prefix="/api/car-of-week", tags=["Маш�
 app.include_router(convoy.router, prefix="/api/convoy", tags=["Конвой-режим"])
 app.include_router(ai_diagnosis.router, prefix="/api/ai-diagnosis", tags=["ИИ-диагностика"])
 app.include_router(daily_login.router, prefix="/api/daily-login", tags=["Ежедневный вход"])
+app.include_router(trips.router, prefix="/api/trips", tags=["Поездки"])

@@ -32,6 +32,7 @@ from app.models.car_of_week import CarOfWeekEntry, CarOfWeekVote
 from app.models.convoy import Convoy, ConvoyMember
 from app.models.part_listing import PartListing
 from app.models.ride_pool import RideOffer, RideBooking
+from app.models.trip import Trip
 
 __all__ = [
     "User",
@@ -85,6 +86,7 @@ __all__ = [
     "PartListing",
     "RideOffer",
     "RideBooking",
+    "Trip",
     "Challenge",
     "ChallengeProgress",
 ]
